@@ -1,0 +1,197 @@
+
+---
+title: 'Problem Set #5'
+author: "Tiantian Meng, Caiwei Wang, Wendy Cheng"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: no
+    toc_depth: '2'
+    df_print: paged
+  prettydoc::html_pretty:
+    df_print: kable
+    theme: leonids
+    highlight: github
+    toc: no
+    toc_depth: 2
+    toc_float:
+      collapsed: no
+  pdf_document:
+    toc: no
+    toc_depth: '2'
+urlcolor: blue
+---
+
+```{r, include=FALSE}
+library(ggplot2)
+library(data.table)
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning = FALSE, fig.width = 16/2, fig.height = 9/2, tidy.opts=list(width.cutoff=60), tidy=TRUE)
+```
+
+This is the fifth problem set for QTM 347.  This homework will cover exercises related to splines and GAMs. 
+
+Please use the intro to RMarkdown posted in the Intro module and my .Rmd file as a guide for writing up your answers.  You can use any language you want, but I think that a number of the computational problems are easier in R.  Please post any questions about the content of this problem set or RMarkdown questions to the corresponding discussion board.
+
+Your final deliverable should be two files: 1) a .Rmd/.ipynb file and 2) either a rendered HTML file or a PDF.  Students can complete this assignment in groups of up to 3.  Please identify your collaborators at the top of your document.  All students should turn in a copy of the solutions, but your solutions can be identical to those of your collaborators.
+
+This assignment is due by February 17th, 2023 at 11:59 PM EST.  
+
+***
+
+# Problem 1: A Nifty Identity for Cubic Regression Splines (20 pts)
+
+Regression splines are a broadly applicable method for regression analysis because they can be represented and estimated as an augmented OLS problem.
+
+A generic cubic regression spline with $K$ knots can be represented as a linear model with $K + 4$ basis expansion terms:
+
+$$h_1(x) = 1 \text{   ;   } h_{\text{2 to 4}}(x) = \{x,x^2,x^3\}$$
+
+$$h_{\text{5 to K + 4}} = \{(x - \xi_1)_+^3 ,  (x - \xi_2)_+^3,...,(x - \xi_K)_+^3\}$$
+
+$$\hat{y}_i = \sum \limits_{k = 1}^{K + 4} \hat{\beta}_k h_k(x_i)$$
+Cubic regression splines fit a function to the data that is continuous with respect to $x$ and continuous in its first two derivatives.
+
+For an arbitrary collection of $K \le N$ knots, prove that the cubic regression spline provides a function that is continuous in the first and second derivative at the knots.
+
+Notes:
+
+  1. You can take it as a given that the function is continuous and twice differential away from the knots.
+  
+  2. The regression coefficients are fixed - no need to worry about them in your proof.
+  
+  3. With an appropriate argument about the relationship between continuity in the 1st and 2nd derivatives (e.g. is one sufficient for the other?), you don't need to explicitly show continuity on the first derivatives.
+  
+
+```{r}
+train <- read.csv("collegeTrain2.csv")
+test <- read.csv("collegeTest2.csv")
+train$Private<-ifelse(train$Private =="Yes",1,0) #yes:1; no:0
+test$Private<-ifelse(test$Private =="Yes",1,0)
+head(data)
+head(test)
+```
+
+# Problem 2: Nonlinear Regression Methods (80 pts)
+
+The data sets `collegeTrain2.csv` (600 observations) and `collegeTest2.csv` (177 observations) include information about different colleges in the U.S.  We're going to use this data set to try to build a model that predicts the out of state tuition for a college using a variety of predictors related to college quality.  Note that this data was collected back in 1995 - a magical time in U.S. history where "Run Around" by Blues Traveler was playing on the radio, Bill Clinton had a plan to actually balance the U.S. budget, and young Dr. McAlister learned to tie his shoes in Ms. Lamb's first grade class.  It is also notable that college used to be affordable!  Don't be too downtrodden when you look at this data set and see Emory's out of state tuition back then...
+
+As always, the test set is intended to be used only for quantifying expected prediction error after choosing some trained models.  A description of the variables in the data set can be found [here](https://www.rdocumentation.org/packages/ISLR/versions/1.4/topics/College).  I've added an additional predictor called `EnrollRate` which is the proportion of students who applied to the school that were accepted **and** enrolled in the school in the next semester.
+
+**Note**: Go ahead and convert `private` to a 0/1 numeric variable in both the training and test data sets.
+
+## Part 1 (5 pts.)
+
+Let's start by looking at a single predictor - `EnrollRate`.  Plot out of state tuition against the enrollment rate.  Does this look linear?
+
+### Part 1 Solution
+
+```{r}
+p1 <- ggplot(train,aes(EnrollRate,Outstate)) + 
+  geom_point() + 
+  stat_smooth(method = "lm",  
+              formula = y ~ x,
+              se = FALSE) +
+  labs(title = "OutState Tuition vs EnrollRate")
+
+p1
+
+```
+
+The relationship seems like not very linear, since the dots in the plots are spread out, not very closed to the regression line.
+
+## Part 2 (10 pts.)
+
+Using a measure of expected prediction error appropriate for a standard linear model (LOOCV, for example), find the order of global polynomial that minimizes EPE for out of state price using `EnrollRate`.  Using this value, train your model on the full training set and plot the prediction curve implied by the polynomial model on your graph.  Save the LOOCV estimate for your chosen polynomial order for later.
+
+
+### Part 2 Solution
+
+```{r}
+loocv_lm <- function(fit){
+  return(mean(((fit$residuals)/(1 - hatvalues(fit)))^2))
+}
+
+set.seed(12345)
+outstate_1d <- data.frame('x' = train$EnrollRate, 'y' = train$Outstate)
+
+loocv_poly_lm <- c()
+for(i in 1:10){
+  lm_mod <- lm(y ~ poly(x, i, raw = TRUE), data = outstate_1d)
+  loocv_poly_lm[i] <- loocv_lm(lm_mod)
+}
+
+grid <- data.frame("x" = seq(min(outstate_1d$x),max(outstate_1d$x),length = 5000))
+
+plot(train$EnrollRate, train$Outstate, xlab = "Enrollment", ylab = "Outstate Price", cex = .7, col = "gray", main = "Global Polynomial")
+lines(grid$x, predict(lm(y ~ poly(x, which.min(loocv_poly_lm), raw = TRUE), data = outstate_1d), newdata = grid), col = "red", lwd = 3)
+
+final <- lm(Outstate~poly(EnrollRate, min_order), train)
+summary(final)
+
+min_order <- which.min(loocv_poly_lm)
+min_order
+global_poly_min_epe <- min(loocv_poly_lm)
+global_poly_min_epe
+
+```
+
+The order of global polynomial that minimizes EPE for out of state price is 6, and the min EPE (loocv estimator) is 11797493.
+
+## Part 3 (20 pts.)
+
+Next, estimate a cubic regression spline, a cubic natural spline, and a smoothing spline that predicts out-of-state tuition using `EnrollRate`.  For the regression and natural splines, compute a LOOCV estimate of the expected prediction error.  For the smoothing spline, record the returned GCV EPE estimate.  
+
+For the regression and natural splines, you need to choose the number of knots or degrees of freedom.  I would recommend setting these to 10 to start and playing with it until you get something that looks right (not too wiggly, but not too smooth).  For the smoothing spline, you should choose the final form using a built-in cross-validation method.  
+
+Add the three corresponding prediction curves to your plot.  How do the drawn curves differ between methods?
+
+Compare the EPE estimates for your polynomial regression, regression spline, natural spline, and smoothing spline.  Which is the lowest?  How do the splines compare to your chosen polynomial model?  Provide some intuition for this result.
+
+### Part 3 Solution
+
+
+
+## Part 4 (15 pts.)
+
+Now, let's consider the multivariate case with all of the predictors.  Let's improve on the standard linear model by using LASSO to do some variable selection and shrinkage.  Fit the LASSO model to the training data and use K-fold cross validation to select a value of $\lambda$ and select an "optimal" LASSO specification.
+
+How many variables are non-zero at your chosen value of $\lambda$?  Which variables have non-zero coefficients?  Feel free to use a plot to convey this information.
+
+Save this model and the optimal value of $\lambda$ for later use.  Similarly, record the expected prediction error of your "full" LASSO model at the chosen value of $\lambda$.
+
+### Part 4 Solution
+
+
+## Part 5 (20 pts.)
+
+Now, let's see if we can improve on the standard LASSO regression model using a GAM.  There are three approaches you can take here:
+
+  1. Use all of the predictors.
+  2. Only use the predictors selected by LASSO under your optimal model.
+  3. Try to fit the GAM with an even smaller model using a subset of predictors from a higher sparsity point on the LASSO path.
+  
+Option 3 is probably your best bet for this particular problem since the GAM software requires explicit formulas.
+
+Use the LASSO regularization path for your LASSO model estimated in part 4 to pick the model with **at most** 5 non-zero coefficients that minimizes expected prediction error.  This is easy to do using `glmnet` since it has already estimated the LASSO coefficients at many different values of $\lambda$.
+
+Using the selected variables, estimate a GAM model that best predicts out of state tuition.  Try different combinations of linear terms, spline terms, and two-way thin-plate/tensor spline terms to try to minimize the GCV associated with your GAM.
+
+**Important**: Any binary predictors should not be wrapped in a spline term!
+
+Create a plot that shows the partial prediction function for each feature.  Do the marginal relationships make sense?  For any 2-predictor spline terms, do they capture anything that wouldn't be captured by a linear model?  
+
+Be sure to explicitly note your "optimal" model and why you chose that one.  Your search doesn't need to be exhaustive (that's impossible), just a reasonable attempt to get a good predictive model!
+
+### Part 5 Solution
+
+## Part 6 (10 pts)
+
+Let's compare the full LASSO to the hybrid LASSO + GAM approach. 
+
+Which of the two models has the lowest estimate of expected prediction error (the K-fold metric for LASSO vs. GCV from your GAM)?
+
+Create predictions using your LASSO model and GAM for the out of sample test data.  Use these predictions to compute the out of sample MSE for each method.  Which performs best?
+
+What do these results say about the importance of nonlinearities and simple complex dependencies (encoded by any multivariate splines) in the feature set compared to using **all** of the features but requiring global linearity and conditional independence between predictors? 
+
+### Part 6 Solution

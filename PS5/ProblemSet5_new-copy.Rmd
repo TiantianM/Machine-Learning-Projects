@@ -1,0 +1,306 @@
+
+---
+title: 'Problem Set #5'
+author: "Caiwei Wang, Tiantian Meng, Wendy Cheng"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: no
+    toc_depth: '2'
+    df_print: paged
+  prettydoc::html_pretty:
+    df_print: kable
+    theme: leonids
+    highlight: github
+    toc: no
+    toc_depth: 2
+    toc_float:
+      collapsed: no
+  pdf_document:
+    toc: no
+    toc_depth: '2'
+urlcolor: blue
+---
+
+```{r, include=FALSE}
+library(ggplot2)
+library(data.table)
+library(dplyr)
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning = FALSE, fig.width = 16/2, fig.height = 9/2, tidy.opts=list(width.cutoff=60), tidy=TRUE)
+```
+
+
+This is the fifth problem set for QTM 347.  This homework will cover exercises related to splines and GAMs. 
+
+Please use the intro to RMarkdown posted in the Intro module and my .Rmd file as a guide for writing up your answers.  You can use any language you want, but I think that a number of the computational problems are easier in R.  Please post any questions about the content of this problem set or RMarkdown questions to the corresponding discussion board.
+
+Your final deliverable should be two files: 1) a .Rmd/.ipynb file and 2) either a rendered HTML file or a PDF.  Students can complete this assignment in groups of up to 3.  Please identify your collaborators at the top of your document.  All students should turn in a copy of the solutions, but your solutions can be identical to those of your collaborators.
+
+This assignment is due by February 17th, 2023 at 11:59 PM EST.  
+
+***
+
+# Problem 1: A Nifty Identity for Cubic Regression Splines (20 pts)
+
+Regression splines are a broadly applicable method for regression analysis because they can be represented and estimated as an augmented OLS problem.
+
+A generic cubic regression spline with $K$ knots can be represented as a linear model with $K + 4$ basis expansion terms:
+
+$$h_1(x) = 1 \text{   ;   } h_{\text{2 to 4}}(x) = \{x,x^2,x^3\}$$
+
+$$h_{\text{5 to K + 4}} = \{(x - \xi_1)_+^3 ,  (x - \xi_2)_+^3,...,(x - \xi_K)_+^3\}$$
+
+$$\hat{y}_i = \sum \limits_{k = 1}^{K + 4} \hat{\beta}_k h_k(x_i)$$
+Cubic regression splines fit a function to the data that is continuous with respect to $x$ and continuous in its first two derivatives.
+
+For an arbitrary collection of $K \le N$ knots, prove that the cubic regression spline provides a function that is continuous in the first and second derivative at the knots.
+
+Notes:
+
+  1. You can take it as a given that the function is continuous and twice differential away from the knots.
+  
+  2. The regression coefficients are fixed - no need to worry about them in your proof.
+  
+  3. With an appropriate argument about the relationship between continuity in the 1st and 2nd derivatives (e.g. is one sufficient for the other?), you don't need to explicitly show continuity on the first derivatives.
+  
+### Problem 1 Solution
+
+High-level idea: Prove for an arbitrary knot that the second derivative is continuous. Showing the 2nd derivative from the left of the knot and from the right of the knot are equivalent. Then, argue that this tells us everything we need to know about continuity of the function (and the 1st derivative, in turn).
+
+For nth order polynomials, the spline function and its first n-1 order derivatives are continuous at the knots. Let's assume that we have a knot at a point x = c, where the cubic regression splines is defined by a set of cubic polynomials that are continuous and smooth on the interval [a,b]. We can then write the spline function as a piecewise function with different cubic polynomial coefficient on each interval, as follow:
+$$S(x) = S1(x), a<= x < c \\ =\ S2(x), c <= x <= b$$
+where S1(x) and S2(x) are cubic polynomials that represent the spline function on either side of the knot. Since S1(x) and S2(x) are both cubic polynomials, their second derivatives are quadratic polynomials with constant coefficient. Therefore the second derivative of the spline function is itself a piecewise function that consists of quadratic polynomials on either side of the knot. We need to show that:
+$$lim\ (x->c-)\ S''(x)\ =\ lim\ (x->c+)\ S''(x)$$
+On the interval [a,c), the cubic polynomial S1(x) can be written as:
+$$S1(x)\ =\ \beta_0\ +\ \beta_1(x-a)\ +\ \beta_2(x-a)^2\ +\ \beta_3(x-a)^3$$
+where $\beta_0$, $\beta_1$, $\beta_2$, $\beta_3$ are the coefficients of the cubic polynomial. Taking the second derivative of S1(x), we obtain:
+$$S1''(x)\ =\ 2\beta_2\ +\ 6\beta_3(x-a) $$
+As x approaches c from the left, the quadratic term $6\beta_3(x-a)$ goes to zero, and we are left with:
+$$lim(x->c-)S1''(x)\ =\ 2\beta_2$$
+
+Similarly, on the interval (c,b], the cubic polynomial S2(x) can be written as:
+$$S2(x)\ =\ \beta_{02} +\ \beta_{12}(x-c)\ +\ \beta_{22}(x-c)^2\ +\ \beta_{32}(x-c)^3$$
+where $\beta_{02}$, $\beta_{12}$, $\beta_{22}$, $\beta_{32}$ are the coefficient of the cubic polynomial. Taking the second derivative of S2(x), we obtain:
+$$S2''(x)\ =\ 2\beta_{22}\ +\ 6\beta_{32}(x-c) $$
+As x approaches c from the right, the quadratic term $6\beta_{32}(x-c)$ goes to zero, and we are left with:
+$$lim(x->c+)S2''(x)\ =\ 2\beta_{22} $$
+Since the coefficient of the cubic polynomials are continuous and smooth on either side of the knot, it follows that the limits of the second derivative as x approaches c from the left and right are equal, i.e.,
+
+$$lim(x->c-)S''(x)\ =\ lim(x->c+)S''(x) $$
+Therefore, the second derivative of the cubic regression spline is continuous from the left and right of the knot.
+
+If a function is differentiable at a point, it means that its derivative exists at that point.  If the derivative is continuous at that point, it means that the function is continuously differentiable at that point, which means that the function is differentiable and its derivative is also continuous.
+
+So, if a function has a second derivative, it means that the first derivative exists and is differentiable.  If the second derivative is continuous, it means that the function is twice continuously differentiable, which means that the function has a second derivative that is continuous, and its first derivative is also continuous.
+
+In other words, if a function is twice continuously differentiable, then it is also continuously differentiable, and if a function is continuously differentiable, then it is differentiable.  However, the converse is not necessarily true.  A function that is differentiable may not be continuously differentiable, and a function that is continuously differentiable may not have a second derivative that is continuous.
+
+Therefore, continuity in the second derivative is not sufficient for continuity in the first derivative, and continuity in the first derivative is not sufficient for continuity in the second derivative.  Each concept is independent and must be checked separately.
+
+# Problem 2: Nonlinear Regression Methods (80 pts)
+
+The data sets `collegeTrain2.csv` (600 observations) and `collegeTest2.csv` (177 observations) include information about different colleges in the U.S.  We're going to use this data set to try to build a model that predicts the out of state tuition for a college using a variety of predictors related to college quality.  Note that this data was collected back in 1995 - a magical time in U.S. history where "Run Around" by Blues Traveler was playing on the radio, Bill Clinton had a plan to actually balance the U.S. budget, and young Dr. McAlister learned to tie his shoes in Ms. Lamb's first grade class.  It is also notable that college used to be affordable!  Don't be too downtrodden when you look at this data set and see Emory's out of state tuition back then...
+
+As always, the test set is intended to be used only for quantifying expected prediction error after choosing some trained models.  A description of the variables in the data set can be found [here](https://www.rdocumentation.org/packages/ISLR/versions/1.4/topics/College).  I've added an additional predictor called `EnrollRate` which is the proportion of students who applied to the school that were accepted **and** enrolled in the school in the next semester.
+
+**Note**: Go ahead and convert `private` to a 0/1 numeric variable in both the training and test data sets.
+
+```{r}
+train <- read.csv("collegeTrain2.csv")
+test <- read.csv("collegeTest2.csv")
+train$Private<-ifelse(train$Private =="Yes",1,0) #yes:1; no:0
+test$Private<-ifelse(test$Private =="Yes",1,0)
+```
+
+## Part 1 (5 pts.)
+
+Let's start by looking at a single predictor - `EnrollRate`.  Plot out of state tuition against the enrollment rate.  Does this look linear?
+
+### Part 1 Solution
+```{r}
+p1 <- ggplot(train,aes(EnrollRate,Outstate)) + 
+  geom_point() + 
+  stat_smooth(method = "lm",  
+              formula = y ~ x,
+              se = FALSE) +
+  labs(title = "OutState Tuition vs EnrollRate")
+
+p1
+
+```
+
+The relationship seems like not very linear, since the dots in the plots are spread out, not very closed to the regression line.
+
+## Part 2 (10 pts.)
+
+Using a measure of expected prediction error appropriate for a standard linear model (LOOCV, for example), find the order of global polynomial that minimizes EPE for out of state price using `EnrollRate`.  Using this value, train your model on the full training set and plot the prediction curve implied by the polynomial model on your graph.  Save the LOOCV estimate for your chosen polynomial order for later.
+
+### Part 2 Solution
+```{r}
+loocv_lm <- function(fit){
+  return(mean(((fit$residuals)/(1 - hatvalues(fit)))^2))
+}
+
+set.seed(12345)
+outstate_1d <- data.frame('x' = train$EnrollRate, 'y' = train$Outstate)
+
+loocv_poly_lm <- c()
+for(i in 1:10){
+  lm_mod <- lm(y ~ poly(x, i, raw = TRUE), data = outstate_1d)
+  loocv_poly_lm[i] <- loocv_lm(lm_mod)
+}
+
+grid <- data.frame("x" = seq(min(outstate_1d$x),max(outstate_1d$x),length = 5000))
+
+plot(train$EnrollRate, train$Outstate, xlab = "Enrollment", ylab = "Outstate Price", cex = .7, col = "gray", main = "Global Polynomial")
+lines(grid$x, predict(lm(y ~ poly(x, which.min(loocv_poly_lm), raw = TRUE), data = outstate_1d), newdata = grid), col = "red", lwd = 3)
+
+min_order <- which.min(loocv_poly_lm)
+min_order
+global_poly_min_epe <- min(loocv_poly_lm)
+global_poly_min_epe
+
+final <- lm(Outstate~poly(EnrollRate, min_order), train)
+summary(final)
+
+```
+
+The order of global polynomial that minimizes EPE for out of state price is 6, and the min EPE (loocv estimator) is 11797493.
+
+
+## Part 3 (20 pts.)
+
+Next, estimate a cubic regression spline, a cubic natural spline, and a smoothing spline that predicts out-of-state tuition using `EnrollRate`.  For the regression and natural splines, compute a LOOCV estimate of the expected prediction error.  For the smoothing spline, record the returned GCV EPE estimate.  
+
+For the regression and natural splines, you need to choose the number of knots or degrees of freedom.  I would recommend setting these to 10 to start and playing with it until you get something that looks right (not too wiggly, but not too smooth).  For the smoothing spline, you should choose the final form using a built-in cross-validation method.  
+
+Add the three corresponding prediction curves to your plot.  How do the drawn curves differ between methods?
+
+Compare the EPE estimates for your polynomial regression, regression spline, natural spline, and smoothing spline.  Which is the lowest?  How do the splines compare to your chosen polynomial model?  Provide some intuition for this result.
+
+### Part 3 Solution
+```{r}
+library(splines)
+# LOOCV estimate of prediction error
+loocv_lm <- function(fit){
+  return(mean(((fit$residuals)/(1 - hatvalues(fit)))^2))
+}
+
+train_1d <- data.frame ('x' = train$EnrollRate, 'y' = train$Outstate)
+head(train_1d)
+```
+
+```{r}
+# smoothing spline
+ss_mod <- smooth.spline(x = train_1d$x, train_1d$y)
+# Plot three prediction curves
+grid <- data.frame("x" = seq(min(train_1d$x),max(train_1d$x),length = 1200))
+ss_preds <- predict(ss_mod, x = grid$x)
+plot(train$EnrollRate, train$Outstate, xlab = "Enroll Rate", ylab = "Out-of-state tuition", cex = .7, col = "gray", main = "Splines")
+lines(grid$x, predict(lm(y ~ bs(x, df = 12), data = train_1d), newdata = grid), col = "red", lwd = 3)
+lines(grid$x, predict(lm(y ~ ns(x, df = 10), data = train_1d), newdata = grid), col = "blue", lwd = 3)
+lines(grid$x, ss_preds$y, col = "orange", lwd = 3)
+legend("topright",c("Reg. Spline","Nat. Spline","Smooth Spline"), lty = c(1,1,1), lwd = c(3,3,3), col = c("red","blue","orange"))
+```
+
+After playing with several number of knots, we choose 12 degrees of freedom for regression splines and 10 degrees of freedom for natural splines. As shown in the plot above, the splines are not too wiggly and not too smooth. 
+
+```{r}
+# cubic regresion spline: compute LOOCV  
+cubic_reg_spline <- lm(y ~ bs(x, df =12), data = train_1d)
+reg_spline_loocv <- loocv_lm(cubic_reg_spline)
+# cubic natural spline: compute LOOCV
+cubic_nat_spline <- lm(y ~ ns(x, df = 10), data = train_1d)
+nat_spline_loocv <- loocv_lm(cubic_nat_spline)
+```
+
+
+Now we can compare the EPE estimates for our polynomial regression, regression spline, natural splines and smoothing spline:
+```{r}
+# 加上polynomial regression model and compare 
+epe_tab <- c(global_poly_min_epe,reg_spline_loocv,nat_spline_loocv,ss_mod$cv.crit)
+names(epe_tab) <- c("Polynomial","Reg. Spline","Nat. Spline","Smooth Spline")
+print(epe_tab)
+```
+
+
+## Part 4 (15 pts.)
+
+Now, let's consider the multivariate case with all of the predictors.  Let's improve on the standard linear model by using LASSO to do some variable selection and shrinkage.  Fit the LASSO model to the training data and use K-fold cross validation to select a value of $\lambda$ and select an "optimal" LASSO specification.
+
+How many variables are non-zero at your chosen value of $\lambda$?  Which variables have non-zero coefficients?  Feel free to use a plot to convey this information.
+
+Save this model and the optimal value of $\lambda$ for later use.  Similarly, record the expected prediction error of your "full" LASSO model at the chosen value of $\lambda$.
+
+### Part 4 Solution
+```{r}
+train_pred <- as.matrix(subset(train, select = (-c(Outstate, CollegeNames))))
+train_out <- as.matrix(train$Outstate)
+lasso_mod_cv <- glmnet::cv.glmnet(x = train_pred, y = train_out, aplpha = 1)
+# minimum lambda
+lambda_min <- lasso_mod_cv $ lambda.min
+lambda_min
+```
+
+
+```{r}
+lasso_coefs <- predict(lasso_mod_cv, type = "coefficients", s = lambda_min)
+l <- as.matrix(lasso_coefs)
+k <- as.data.frame(t(l))
+k_t <- transpose(k)
+l_c = cbind(colnames(k), k_t)
+l_c = l_c[-1,]
+names(l_c)=c("coefficients","value")
+
+#Sideways Bar Graph
+ggplot(data = l_c, aes(x = coefficients, y = abs(value))) +
+ geom_bar(stat = "identity", width = 0.75) +
+ coord_flip() +
+ labs(x = "\n coefficients \n", y = "\n value \n", title = "\n LASSO Regression \n") +
+ theme(plot.title = element_text(hjust = 0.5, size = 15), 
+ axis.title.x = element_text(face="bold", colour="red", size = 12),
+ axis.title.y = element_text(face="bold", colour="red", size = 12))
+```
+
+```{r}
+# the expected prediction error 
+lasso_EPE <- min(lasso_mod_cv$cvm)
+lasso_EPE
+```
+
+
+
+
+## Part 5 (20 pts.)
+
+Now, let's see if we can improve on the standard LASSO regression model using a GAM.  There are three approaches you can take here:
+
+  1. Use all of the predictors.
+  2. Only use the predictors selected by LASSO under your optimal model.
+  3. Try to fit the GAM with an even smaller model using a subset of predictors from a higher sparsity point on the LASSO path.
+  
+Option 3 is probably your best bet for this particular problem since the GAM software requires explicit formulas.
+
+Use the LASSO regularization path for your LASSO model estimated in part 4 to pick the model with **at most** 5 non-zero coefficients that minimizes expected prediction error.  This is easy to do using `glmnet` since it has already estimated the LASSO coefficients at many different values of $\lambda$.
+
+Using the selected variables, estimate a GAM model that best predicts out of state tuition.  Try different combinations of linear terms, spline terms, and two-way thin-plate/tensor spline terms to try to minimize the GCV associated with your GAM.
+
+**Important**: Any binary predictors should not be wrapped in a spline term!
+
+Create a plot that shows the partial prediction function for each feature.  Do the marginal relationships make sense?  For any 2-predictor spline terms, do they capture anything that wouldn't be captured by a linear model?  
+
+Be sure to explicitly note your "optimal" model and why you chose that one.  Your search doesn't need to be exhaustive (that's impossible), just a reasonable attempt to get a good predictive model!
+
+### Part 5 Solution
+
+## Part 6 (10 pts)
+
+Let's compare the full LASSO to the hybrid LASSO + GAM approach. 
+
+Which of the two models has the lowest estimate of expected prediction error (the K-fold metric for LASSO vs. GCV from your GAM)?
+
+Create predictions using your LASSO model and GAM for the out of sample test data.  Use these predictions to compute the out of sample MSE for each method.  Which performs best?
+
+What do these results say about the importance of nonlinearities and simple complex dependencies (encoded by any multivariate splines) in the feature set compared to using **all** of the features but requiring global linearity and conditional independence between predictors? 
+
+### Part 6 Solution
