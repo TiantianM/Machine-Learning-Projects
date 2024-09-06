@@ -1,0 +1,516 @@
+---
+title: "Midterm Data Exercise #2 - Classification"
+author: "Kevin McAlister"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: no
+    toc_depth: '2'
+  prettydoc::html_pretty:
+    df_print: kable
+    theme: leonids
+    highlight: github
+    toc: no
+    toc_depth: 2
+    toc_float:
+      collapsed: no
+urlcolor: blue
+---
+
+```{r, include=FALSE}
+library(ggplot2)
+library(data.table)
+library(tidyverse)
+library(magrittr)
+library(caret)
+library(MLmetrics)
+library(glmnet)
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning = FALSE, fig.width = 16/2, fig.height = 9/2, tidy.opts=list(width.cutoff=60), tidy=TRUE)
+```
+
+This is the second midterm data analysis exercise for QTM 347. This exercise will use a single data set to ask a few questions related to creating predictive models for classification. This data set is larger and messier than those that have been given for the problem set exercises. It is intended to provide you with a "real-world" scenario you might see if attempting to build a predictive model for a question you care about. Your final solutions (a .Rmd file, a corresponding rendered document, and 2 .csv files with your predictions) should be submitted by 11:59 PM on April 14th.
+
+Unlike the problem sets, there is less guidance as to what methods to use and how to interpret results. The idea is that you can treat this like a real analysis exercise - applying different models, seeing what works and doesn't work, presenting the best possible model but being transparent about the downsides of your choice. For each of the tasks, you should consider a variety of potential methods and choose a single one as your "best" model.
+
+A review of classification methods that we've covered in this course:
+
+1.  Discriminative Methods
+
+-   Logistic Regression
+-   Multinomial Logistic Regression
+-   Shrinkage Approaches to Logistic Regression (LASSO and Ridge)
+-   Generalized Additive Logistic Regression
+
+2.  Generative Methods
+
+-   Bayes' Theorem for Discrete Features
+-   Linear and Quadratic Disciminant Analysis
+-   Naive Bayes classifiers (with a mixture of discrete and continuous margins $\pm$ kernel density estimates)
+
+3.  Geometric Methods
+
+-   Support Vector Classifiers
+-   Support Vector Machines with Kernelized Feature Sets (Polynomial and RBF)
+
+4.  Flexible Classifiers
+
+-   KNN
+-   Classification Trees (Bagged Trees, Random Forests, Probability Forests)
+-   Boosted Trees (GBMs, XGBoost)
+
+------------------------------------------------------------------------
+
+## Data Set Overview
+
+This assignment revolves around a standard in the classification literature - the MNIST handwritten digits database. The MNIST data set is a collection of 70,000 handwritten digits taken from handwritten zip codes on letters sent via the USPS. A single instance (or observation) is a $28 \times 28$ pixel image of a handwritten digit. Each of the 784 features associated with each image is a **color value** associated with a single pixel. Color has been coded on a grayscale with 0 corresponding to white (a "paper" pixel), 256 corresponding to black (a "pencil" pixel), and all values in between corresponding to varying levels of gray in accordance with the direction of the grayscale. In reality, all pixels are either paper or pencil, but various aliasing algorithms and rounding algorithms needed to handle pixels that take on both paper and pencil values lead some pixels to fall at a gray level.
+
+To make analysis possible, the MNIST data set processes the images to ensure that the images are centered - the center of pencil mass is shifted to be around pixel 14,14 - and *deskewed* - the pencil pixels are shifted to be as vertical as possible. The original deskewing algorithm used for the MNIST data set was not very effective, though, so many images are still skewed in one direction or another.
+
+Each image is associated with a label of 0 through 9 coded by a series of human coders. There has been significant quality control on this data set that ensures that all of the labels are correct!
+
+MNIST is typically used to benchmark classification algorithms. The data set is of good size for many state-of-the-art classification methods and presents a somewhat difficult classification problem with 10 categories. The 10 class problem has been applied to many different algorithms to varying levels of success. The [original website for MNIST from Yann LeCun, Corinna Cortes, and Christopher J.C. Burges](http://yann.lecun.com/exdb/mnist/) contains error rates on a common test set of 10,000 instances for a number of different classification approaches. For example, over the 10 class problem using multinomial logistic regression (annoyingly referred to as a 1-layer neural network) has a 12% error rate on the test set. On the other hand, a committee of 35 convolutional neural nets was able to misclassify only 23 of the test digits!
+
+We'll be using a modified version of this data set to run a series of classification models for different classification tasks. Your final task will be to build a classification model for the full 10 class problem!
+
+## Modifying the MNIST Data Set
+
+The original data set contains 70,000 instances of labeled $28 \times 28$ pixels. Since we have neither the computational power nor the time to deal with data of this magnitude, I've made some convenience alterations to the data set. Here, I'll outline exactly what I did.
+
+First, to reduce the number of pixels for each image, I reduced the resolution of the images from 784 pixels to 196 pixels. To do this, I created 196 $2 \times 2$ pixel groups and averaged the color values across the four included pixels. As seen in the figure below, this drastically reduced the dimensionality of the predictor space at the cost of a little less clarity in the resulting pixel images.
+
+Second, to further reduce the number of predictors, I removed full rows and columns of pixels that are part of the paper bounding box (e.g. all paper pixels) in more than 99% of images. This resulted in removing any pixel in columns 1 and 14 and in rows 1 and 14. This reduced the number of pixels in each image to 144.
+
+Finally, I added just a little random noise to any paper pixels (pixels with colors values less than 5) to inject a little variance into any mostly paper columns of pixels. This will matter very little for classification accuracy but will allow methods that require inversion of a covariance matrix (logistic regression, QDA, etc.) to run without any additional processing needed. These final two steps have little effect on the images compared to the $14 \times 14$ pixel images.
+
+```{r eval=FALSE, fig.align='center', include=FALSE}
+plot_digit <- function(x, bw = TRUE,...){
+  if(sqrt(length(x)) != round(sqrt(length(x)))){
+    stop(print("Not a square image! Something is wrong here."))
+  }
+  n <- sqrt(length(x))
+  if(bw == TRUE){
+    x <- as.numeric(x > 50)
+  }
+  par(pty = "s")
+  image(matrix(as.matrix(x), nrow = n)[,n:1], col = gray(12:1 / 12), ...)
+}
+train28 <- fread("MNIST28Pix.csv", nrows = 2)
+train14 <- fread("MNIST14Pix.csv", nrows = 2)
+train12 <- fread("MNIST12PixNoised.csv", nrows = 2)
+par(mfrow = c(2,3))
+plot_digit(train28[1,], bw = FALSE, main = "28 by 28")
+plot_digit(train14[1,], bw = FALSE, main = "14 by 14")
+plot_digit(train12[1,], bw = FALSE, main = "12 by 12")
+plot_digit(train28[2,], bw = FALSE, main = "28 by 28")
+plot_digit(train14[2,], bw = FALSE, main = "14 by 14")
+plot_digit(train12[2,], bw = FALSE, main = "12 by 12")
+par(mfrow = c(1,1))
+```
+
+## Working with the MNIST Data
+
+Using the $12 \times 12$ images, I've created six data sets for you to work with:
+
+1.  `MNISTTrainXV2.csv` and `MNISTTrainY.csv` which contain 25,000 images or image labels. For each of the ten digits, there are 2,500 observations. I've split the images and the labels into separate files to make plotting the digit images as easy as possible.  I've also included an additional file `MNISTTrainYChar.csv` which makes the class labels character strings - 0 is coded as `Class0`.  This might be useful in some settings.
+
+2.  `MNISTValidationX.csv` and `MNISTValidationY.csv` which contain 15,000 images or image labels. For each of the ten digits, there are 1,500 observations. These data sets can be used to measure out of sample predictive accuracy for the classification methods or create predictions that can then be used to see misclassified images. I've also included an additional file `MNISTValidYChar.csv` which makes the class labels character strings - 0 is coded as `Class0`.  This might be useful in some settings.
+
+3.  `MNISTTestXRand.csv` and `MNISTTestYRand.csv` which contain 10,000 images. There are no labels for this data set. These 10,000 observations (all ten handwritten digits are represented at least 200 times in this test set) will act as a hidden test set that will be used to measure the accuracy of your approaches on my held out test set. `MNISTTestYRand.csv` is an "empty" .csv (all the labels are zeros) that includes the image row corresponding to the test set and a column that can be used to store your final digit prediction for the corresponding row in `MNISTTestX.csv`. Your final deliverable will include two different sets of predictions for this data set.
+
+Each of the data sets that include pixel values are organized in a consistent way. Each image/row is associated with 144 predictors - each of the 144 pixels in the image. The pixels are *vectorized* from their matrix form by row - the first feature is row 1 column 1, the second is row 1 column 2, the 12th feature is row 1 column 12, the 13th feature is row 2 column 1, the 25th features is row 3 column 1, etc. I've provided feature names in each data set to assist in this interpretation.
+
+The reason that this organization is so important is that you will frequently want to convert between the vector of pixels and the actual 2D image (a matrix). We can easily convert the row of 144 pixels to a 12 by 12 matrix by passing the vector to a matrix **by row**. Let $x$ be a vector, then this can be achieved easily in R by using `matrix(nrow = 12, ncol = 12, x, byrow = TRUE)`. This logic can be applied in any scenario where we receive a vector of quantities related to each pixel (coefficients from logistic regression, for example).
+
+Since it is difficult to look at the numbers and know exactly what we're working with, we need a consistent plotting method. The easiest way to plot the MNIST data is to use the `image()` function in R. For your convenience, you can use the `plot_digit()` function below:
+
+```{r eval=FALSE, fig.align='center', include=FALSE}
+plot_digit <- function(x, bw = FALSE,...){
+  if(sqrt(length(x)) != round(sqrt(length(x)))){
+    stop(print("Not a square image! Something is wrong here."))
+  }
+  n <- sqrt(length(x))
+  if(bw == TRUE){
+    x <- as.numeric(x > 50)*256
+  }
+  par(pty = "s")
+  image(matrix(as.matrix(x), nrow = n)[,n:1], col = gray(12:1 / 12), ...)
+}
+#Example
+plot_digit(x = train_x[1,], bw = FALSE, main = "True Class = 0")
+```
+
+`plot_digit()` takes two argument: 1. `x` - a vector of squared integer length that is organized in row-column order (like our MNIST data) and 2. `bw` - a logical (TRUE/FALSE) that tells the function to plot the full grayscale **or** approximately round each pixel to either be white (paper) or black (pencil). `plot_digit` also accepts any arguments that are applicable to the base plot function in R: `main` to add a plot title, `xlab` or `ylab` to add x and y axis labels, etc. `image` in R is a legacy function from S-Plus that has a quirk that it plots columns in reverse order. Be careful if using `image` to create your own figures! You can change the color scheme for `image` using different color range methods. Look online to find instructions for this. There are other methods of plotting the MNIST data in R and Python that can be easily found via a quick Google search.
+
+**Warning!** A common mistake will be to pass a vector of length 145 (pixels + label) to this function. If you get an error, check and make sure that you aren't passing the label to the function!
+
+------------------------------------------------------------------------
+
+
+```{r}
+# load the MNIST data
+trainX <- read_csv("MNISTTrainXV2.csv")
+trainY <- read_csv("MNISTTrainY.csv")
+trainYChar <- read_csv("MNISTTrainYChar.csv")
+validationX <- read_csv("MNISTValidationX.csv")
+validationY <- read_csv("MNISTValidationY.csv")
+validationYChar <- read_csv("MNISTValidYChar.csv")
+testX <- read_csv("MNISTTestXRand.csv")
+testY <- read_csv("MNISTTestYRand.csv")
+```
+## Question 1 (5 pts.)
+
+Let's start by working with the training data to gain some comfort working with the MNIST data.
+
+Create a plot that shows 9 random images in the training data. Label each image with its corresponding label. Do the images match the labels?
+
+```{r}
+
+set.seed(123)
+
+# Create a random sample of 9 image indices
+sample_indices <- sample(nrow(trainX), 9)
+
+# Plot the 9 random images using the plot_digit() function
+plot_digit <- function(x, bw = FALSE, ...) {
+    if (sqrt(length(x)) != round(sqrt(length(x)))) {
+        stop(print("Not a square image! Something is wrong here."))
+    }
+    n <- sqrt(length(x))
+    if (bw == TRUE) {
+        x <- as.numeric(x > 50) * 256
+    }
+    par(pty = "s")
+    image(matrix(as.matrix(x), nrow = n)[, n:1], col = gray(12:1/12),
+        ...)
+}
+
+par(mfrow = c(3, 3))
+for (i in 1:9) {
+  plot_digit(trainX[sample_indices[i], ], main = paste("True Class =", trainY[sample_indices[i],]))
+}
+
+```
+
+## Question 2 (15 pts.)
+
+Let's start with one of the digit pairs that is easiest to tell apart: 0s and 1s. For this question, we'll build a classifier to discriminate between images of 0s and images of 1s. Start by subsetting your training and validation data sets to only include 0s and 1s (a literal manifestation of the classification problem).
+
+```{r}
+trainX_sub <- trainX[trainY$label %in% c(0,1), ]
+validationX_sub <- validationX[validationY$label %in% c(0,1), ]
+
+trainY_sub <- trainY[trainY$label %in% c(0,1), ]
+validationY_sub <- validationY[validationY$label %in% c(0,1), ]
+```
+### Part 1 (8 pts.)
+
+For reasons you will soon see, we'll only consider one classification approach for this problem - logistic regression. Using your training data, train a logistic regression classifier for the literal 0/1 problem. Compute a 5 fold CV estimate of the log loss and misclassification rate. What do you find here?
+
+Create predictions using this model for the validation set.  Plot up to 4 images in the validation set that are misclassified with respect to the Bayes' classifier granted by your logistic regression model. Does this misclassification make sense? What about these images leads the classifier to incorrectly guess the proper label?
+
+Note: the underlying algorithm for logistic regression proceeds iteratively attempting to minimize the logistic regression loss function. Because many of the predictors in this problem have variance close to zero, the default number of iterations (typically 25) may not be enough for the algorithm to converge. You can deal with this issue by setting the maximum number of IRLS iterations to a larger value - 100 should be sufficient. In R, this can be achieved within your `glm` call by adding an additional control argument - `control = list(maxit = 100)`.
+
+
+```{r}
+# 5 fold CV
+train_control <- trainControl(method = "cv", number = 5, classProbs = TRUE,
+    summaryFunction = multiClassSummary)
+# Convert label data to a factor variable
+trainY_subset <- factor(trainY_sub$label)
+```
+
+```{r}
+levels(trainY_subset) <-  make.names(levels(trainY_subset))
+```
+
+```{r}
+# train the logistic regression model
+logistic_mod <- train(trainX_sub, trainY_subset, trControl = train_control,
+    method = "glm", family = binomial(link = "logit"), control = list(maxit = 100))
+
+```
+
+```{r}
+# log loss and misclassification rate
+log <- c(logistic_mod$results$logLoss)
+mis <- 1 - c(logistic_mod$results$Accuracy)
+
+metrics_tab <- cbind(log, mis)
+colnames(metrics_tab) <- c("LogLoss", "MisclassRate")
+rownames(metrics_tab) <- c("Logistic")
+print(metrics_tab)
+
+```
+
+Both of the Rate is low, so the accurate is okay.
+
+```{r}
+# predict on validation set
+pred_val <- predict(logistic_mod, validationX_sub)
+# create a data frame with actual and predicted labels
+val_df <- data.frame(actual = validationY_sub$label, predicted = pred_val)
+
+# identify misclassified images
+misclassified <- val_df[val_df$actual != val_df$predicted, ]
+misclassified_indices <- rownames(misclassified)
+
+# plot up to 4 misclassified images
+par(mfrow = c(2, 2))
+for (i in 1:min(4, length(misclassified_indices))) {
+    index <- as.numeric(misclassified_indices[i])
+    plot_digit(validationX_sub[index, ], main = paste0("Actual: ", misclassified$actual[i], " Predicted: ", misclassified$predicted[i]))
+}
+
+```
+Based on the images shown in the plots, almost all of the misclassifications do make sense. For example, some of the misclassified images have a handwritten digit that is ambiguous, even to the human eye. In other cases, the digit may be written in a non-standard way that is not well-represented in the training set, leading to misclassification. However, without seeing the actual images, it's difficult to say for sure what led to the misclassifications.
+
+### Part 2 (7 pts.)
+
+Let's try to understand exactly how this classifier is working. For the training data, compute a logistic regression classifier with the LASSO penalty on the coefficients. Use K-fold CV to find a value of $\lambda$ that sparsely represents the set of coefficient and viably minimizes the expected misclassification rate for out of sample data.
+
+Using the coefficients associated with your chosen value of $\lambda$, create a plot that shows the relationship between the pixels and the coefficients. Positive coefficients are associated with pixels where a pencil pixel in that location (value \> 0) **increases** the predicted probability that the image is a 1 while negative coefficients are associated with pixels where a pencil pixel in that location (value \> 0) **decreases** the predicted probability that the image is a 1.
+
+Leveraging this plot, come up with a set of rules related to the location of pencil pixels that a human who had the pixel mappings could evaluate to determine if an image is a zero or one. The rules don't need to exactly relate to specific pixels. Rather, they can relate to relative location of the pixels (center vs. noncenter, for example).
+
+This task is, more or less, an example of **computer vision** - trying to use classification methods to make computer view images in the same way as humans.
+
+*Hint*: You can convert a vector of coefficients (don't forget to get rid of the intercept!) to a 12 x 12 matrix using `matrix(ncol = 12, nrow = 12, lasso_coefs, byrow = TRUE)`.
+
+*Hint 2*: Look up some nice ways to plot matrices.  One suggestion can be found [here](https://stackoverflow.com/questions/5638462/r-image-of-a-pixel-matrix).
+
+
+## Question 3 (10 pts.)
+
+We spent a week discussing **generative classifiers**. These classifiers are really fast and work quite well for certain types of problems. Image classification, however, is not one of them.
+
+Using your knowledge of generative classifiers and the corresponding assumptions, argue that this data is not suited to QDA or Naive Bayes. Leverage the training data to make your argument - you may want to compute summary statistics, create density plots, discuss pairwise covariance, etc. Your argument should combine logic and evidence from the training data.
+
+Your argument is enough justification to not even try generative classifiers for this data set!
+
+*Hint*: A feature of the **multivariate normal distribution** is that each marginal density (e.g. the density on each feature) is, itself, normally distributed.
+
+*Second Hint*: Think really carefully about dependence between the pixels. What really makes a seven a seven and a three a three?
+
+#### Question 3 Solution:
+
+In the case of image classification, each image consists of many pixels, each of which is a feature. However, the pixels are not independent of each other. Instead, they are highly correlated due to the spatial arrangement of the image. Also, the distribution of pixel intensities is unlikely to be normally distributed, which is a key assumption of generative classifiers. As a result, for image classification, generative classifiers such as QDA and Naive Bayes are not well-suited due to the high dimensionality of the data and the complex relationships between the features.
+
+To further support the argument, we can leverage the training data. We can start by looking at the summary statistics:
+
+```{r}
+# Extract the summary statistics for each feature
+summary_stats <- data.frame(feature = colnames(trainX))
+summary_stats$mean <- apply(trainX, 2, mean)
+summary_stats$sd <- apply(trainX, 2, sd)
+summary_stats$min <- apply(trainX, 2, min)
+summary_stats$max <- apply(trainX, 2, max)
+
+random_summary_stats <- summary_stats %>% sample_n(10)
+random_summary_stats
+```
+
+From the summary statistics, we can observe that the distribution of pixel values for each digit is not normally distributed. In fact, the distributions are heavily skewed towards the lower end, with a long tail of high pixel values. This violates the assumption of normality that is required for generative classifiers like QDA and Naive Bayes to work effectively. Additionally, we can see that there is high variance in the pixel values across all digits. This is particularly evident when we look at the range of pixel values (i.e. the difference between the maximum and minimum values) for each pixel. This high variance could make it difficult for a generative classifier to accurately capture the underlying distribution of pixel values for each digit.
+
+```{r}
+library(ggplot2)
+library(reshape2)
+
+# Compute the correlation matrix
+cor_matrix <- cor(trainX)
+cor_df <- melt(cor_matrix)
+
+# Create a heatmap
+ggplot(data = cor_df, aes(x = Var1, y = Var2, fill = value)) + 
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red", midpoint = 0, 
+                       name = "Correlation") +
+  labs(title = "Correlation Matrix")+
+  theme(axis.text.y = element_blank(), axis.text.x = element_blank())+
+  xlab("Pixel Index") +
+  ylab("Pixel Index")
+```
+
+We can also look at the covariance matrix for each class label and visualize the matrix using a heatmap. We can observe that the pixel values are highly correlated and that the covariance matrix is dense. This means that the independence assumption of Naive Bayes and QDA is not met, and using these classifiers may lead to poor performance.
+
+
+## Question 4 (20 pts.)
+
+Now, let's work with a more difficult pair - 4s and 9s. Logically, these are going to be more difficult to distinguish! Start by subsetting your training and validation sets to only include 4s and 9s. There may be some situations where you need to recode these to zeros and ones! When making predictions on the test set, be sure to recode the predictions back to 4s and 9s.
+
+```{r}
+trainX_sub4 <- trainX[trainY$label %in% c(4,9), ]
+validationX_sub4 <- validationX[validationY$label %in% c(4,9), ]
+
+trainY_sub4 <- trainY[trainY$label %in% c(4,9), ]
+trainY_sub4$label <- gsub("4","0",trainY_sub4$label)
+trainY_sub4$label <- gsub("9","1",trainY_sub4$label)
+
+validationY_sub4 <- validationY[validationY$label %in% c(4,9), ]
+validationY_sub4$label <- gsub("4","0",validationY_sub4$label)
+validationY_sub4$label <- gsub("9","1",validationY_sub4$label)
+
+```
+
+### Part 1 (5 pts.)
+
+Start by replicating your analysis for 0s and 1s using logistic regression for 4s and 9s. Compute a 5 fold CV estimate of log loss and misclassification rate. How does this compare to the performance of logistic regression for 0s and 1s? Why do these results differ?
+
+```{r}
+# 5 fold CV
+train_control4 <- trainControl(method = "cv", number = 5, classProbs = TRUE,
+    summaryFunction = multiClassSummary)
+# Convert label data to a factor variable
+trainY_subset4 <- factor(trainY_sub4$label)
+```
+
+```{r}
+levels(trainY_subset4) <-  make.names(levels(trainY_subset4))
+```
+
+```{r}
+# train the logistic regression model
+logistic_mod4 <- train(trainX_sub4, trainY_subset4, trControl = train_control4,
+    method = "glm", family = binomial(link = "logit"), control = list(maxit = 100))
+
+```
+
+```{r}
+# log loss and misclassification rate
+log4 <- c(logistic_mod4$results$logLoss)
+mis4 <- 1 - c(logistic_mod4$results$Accuracy)
+
+metrics_tab4 <- cbind(log4, mis4)
+colnames(metrics_tab4) <- c("LogLoss", "MisclassRate")
+rownames(metrics_tab4) <- c("Logistic")
+print(metrics_tab4)
+
+```
+The LogLoss and MisclassRate of 4s and 9s are larger than the 0s and 1s.
+
+### Part 2 (10 pts.)
+
+Using the full suite of classification approaches discussed in class, find a classification approach that **minimizes** the expected misclassification rate of 4s and 9s on a true out of sample data set.
+
+Your answer should discuss the possible approaches to this problem and explain how you made your final choice. Discuss and demonstrate how you chose any tuning parameter values.
+
+At a minimum, you should use at least 3 classification methods. **Regular ol' logistic regression or generative classifiers will not count as one of your candidate methods**. For each method you run, tune the model appropriately. Given your choices for tuning parameters values, compute two admissible estimates of the expected prediction error (e.g. via K-fold or validation set methods) - log loss and misclassification rate. At the end, you should report your results in a table:
+
+| Method | Tuning Parameters | Log Loss | Misclassification Rate |
+|--------|-------------------|----------|------------------------|
+|        |                   |          |                        |
+|        |                   |          |                        |
+|        |                   |          |                        |
+
+and provide some logic for your results.
+
+#### Part 2 Solution:
+
+##### Logistic LASSO classifier:
+```{r}
+# Tune the Logistic LASSO classifier model
+log_lasso_cv <- cv.glmnet(x = as.matrix(trainX_sub4), y = as.numeric(trainY_sub4$label),
+                          family = "binomial", alpha = 1)
+```
+
+```{r}
+# Get the lambda value
+lasso_lambda <- log_lasso_cv$lambda.min
+```
+
+```{r}
+# Now, use caret
+logistic_lasso_mod <- train(trainX_sub4, trainY_subset4,, trControl = train_control4,
+    method = "glmnet", family = "binomial", tuneGrid = data.frame(.alpha = 1,
+        .lambda = lasso_lambda))
+```
+
+```{r}
+log_lasso_loss <- logistic_lasso_mod$results$logLoss
+log_lasso_misclass <- logistic_lasso_mod$results$Accuracy
+```
+
+### Part 3 (5 pts.)
+
+Use the hidden test set to generate a prediction for each included image. Your predictions should be stored in a matrix that has the image key as the first column and the integer value of the class in the second column. Save this matrix as `Q4PredictionsMT2.csv` and include it with your final submission.
+
+Points for this question will be given with respect to classification accuracy. Let $E_i$ be the proportion of observations in the test set (that are actually 4s and 9s) that are correctly classified. Let $E_{max}$ be the maximum proportion of correctly classified observations across the class. Then, your final point total for this part will be:
+
+$$5 \times \frac{E_i}{E_{max}}$$
+
+
+
+## Question 4 (20 pts.)
+
+Now, let's work with **three classes** - 3s, 5s, and 8s. Start by subsetting your training and validation sets to only include 3s, 5s and 8s.
+
+### Part 1 (20 pts.)
+
+Hidden among the 7500 3s, 5s, and 8s in the training set are 20 12 $\times$ 12 pixel images of sandals, sneakers, and ankle boots. These images are taken from another commonly used ML benchmarking data set called "Fashion MNIST". [Fashion MNIST](https://github.com/zalandoresearch/fashion-mnist) is an alternative data set used for classification method benchmarking that has uses pictures of shirts, bags, shoes, etc. rather than images of handwritten digits. Each of the 20 images are shown in the figures below:
+
+![](Shoes1.jpeg)
+
+![](Shoes2.jpeg)
+
+Using everything you've learned about classification methods in this class (and some intuition), come up with a method that finds these images in the training set. At a minimum, create a plot of the most suspect "digits" that shows your best guesses as to the 20 anomalies.
+
+Your points for this problem will be wholly allocated as a function of your method. There is **no perfect answer** for this problem. As long as you put in some effort to find these images, you will get most (if not all) points for this part. As such, please be sure to clearly explain your approach to this task. I am eager to see what you all come up with! This is a really abstract problem, so just try your best.
+
+Note that this is an example of **anomaly detection** - a subset of machine learning algorithms that intend to tell us when something in our data set is weird (or an outlier, if you like to use that kind of terminology). This is a classification-*esque* problem as it would be easy to solve this if we had some labelled shoe images. However, this training set doesn't include any appropriately labelled instances.
+
+**Rule:** You will not receive credit for your approach to this problem if you hard-code logic about which images are shoes. For example, you cannot build a classifier that directly says "if there is a pencil pixel in the 12th column, it is probably a shoe". Put another (Bayesian) way, you should not incorporate prior information into your method. In the real world, you won't know which images are anomalies, so approach this with the same
+
+Notes:
+
+1.  Part of what makes this task so challenging for this particular set of three digits is that 3s, 5s, and 8s look a lot alike! This would be really easy for 0s and 1s because our classifiers are so well tuned for these digits. This means that an approach that finds images close to the decision boundary for this classification problem will yield a mixture of really poorly written digits **and** the shoes. This is a good starting point for creating your own approach, though! You'll have to get creative to try to find things that really don't look like the other images in the data set.
+
+2.  An initial thought may be to use instances from the fashion MNIST data set to train a "shoe/not shoe" classifier. This will not work out-of-the-box because I have processed all of the original 28 x 28 images down to 12 x 12 images. You are more than welcome to do this processing yourself if this is the route that you choose (though, I suggest not going this route as it kinda defeats the purpose of this problem).
+
+3.  An approach that I highly recommend checking out is called a "one-class SVM". Implementations of this approach exist in `ksvm` and `sklearn` in Python. This approach differs from the SVM we covered in class as it uses a parameter `nu` rather than the cost.  Here, `nu` is the rough proportion of observations we would like to label as *anomalous*.  In our data set, we know that .3%-*ish* of the data points are anomalies. Read the documentation on this method and apply it to drastically reduce the number of candidate images! However, it's not guaranteed to return **all** of the shoe images. You'll need to do a little work to get the rest.  You may also find **isolation forests** - a similar design for anomaly detection with random forests - useful here.  
+
+4.  At a certain point, you may just want to use good old human checking to try to sort between bad digit images and shoe images. Unless you're willing to commit a lot of time to labelling, just going through 7500 images one by one will not work. However, looking at 30ish wouldn't take too long. Use classification algorithms to find a few good candidates and sort through those to find your first few "shoe" images.
+
+5.  Once you've found a few shoes, think about creating a classifier. Trees and SVMs are likely your best best for fitting a decision boundary with only a few observations in one specific class (e.g. just a few shoes). One thing that will help here is to train a second classifier using a few "prototype" images - 3s, 5s, and 8s that are good examples of the digits and not the chicken-scratch that makes this problem so hard.
+
+6.  I'm really eager to see your approaches here - this is a weird problem that requires a lot of thought. But, I think that this is a good demonstration of how you might use the approaches we discussed in class to address atypical classification problems.
+
+## Question 6 (30 pts.)
+
+Finally, let's work with the full MNIST data set. This is a 10 class classification problem that has been studied extensively. With your work on this problem, you will join the club of data scientists who have taken a crack at one of machine learning's most infamous classification tasks!
+
+### Part 1 (20 pts.)
+
+Use any tools in our classification arsenal to try to minimize the expected misclassification rate for out of sample handwritten digits.
+
+In your answer, you should benchmark any algorithms that are suited for the problem. For any classification methods that you know will not work well (by virtue of the structure of the data), justify why it's not worth the time to check it. Be sure to explain your method for tuning any hyperparameters.
+
+At a minimum, you should use at least 3 classification methods. **You may not use generative classifiers for this problem**. **In addition, at least two of the three methods should not rely directly on multinomial logistic regression**. For each method you run, tune the model appropriately. Given your choices for tuning parameters values, compute two admissible estimates of the expected prediction error (e.g. via K-fold or validation set methods) - log loss and misclassification rate. At the end, you should report your results in a table:
+
+| Method | Tuning Parameters | Log Loss | Misclassification Rate | Time to Compute |
+|--------|-------------------|----------|------------------------|-----------------|
+|        |                   |          |                        |                 |
+|        |                   |          |                        |                 |
+|        |                   |          |                        |                 |
+
+and provide some logic for your results. Note that there is an additional column in this table related to time. Here, I would like you to estimate the amount of time it takes to tune and train your final model. This can be *guesstimated* in minutes (or hours) or you can monitor the compute time explicitly and report your findings. See [this StackOverflow thread](https://stackoverflow.com/questions/6262203/measuring-function-execution-time-in-r) for an elementary way to do this in R.
+
+Which model performs the best on the 10 class problem? Why do you think this model performs the best? Compare your approach to other possible approaches when answering this question.
+
+Is the tradeoff in accuracy vs. compute time worth the gain in realistic scenarios? Think about how these algorithms might scale as $N$ and $P$ get larger. Specifically, discuss the problem of hyperparameter tuning and how this might contribute to difficulty in implementing your chosen approach.
+
+For one-off classification problems, the computational time may not matter. However, there is significant research into the area of **online classification algorithms** - algorithms in which new predictions can be made quickly using existing data and the classification algorithm can be updated using new training data as it arrives. See [this Wikipedia page](https://en.wikipedia.org/wiki/Online_machine_learning) for more information on this topic.
+
+**WARNING!** SVMs will be very competitive on this problem. However, the compute time needed to train them will be very high. As always, I expect that you will tune the cost parameter for any SVM. So, even more compute time! To mitigate this, you are encouraged to subset the data for SVMs (and trees if you're really running into problems). I think that a reasonable size is 250 per class. You can also reduce the number of cost tuning parameters that you check, though I highly recommend trying cost values that are small (.01 and .1), medium (1), and large (10 & 100). Trees are much more scalable, so I think you'll be able to use the full data for those (not to say that it won't take some time, but not days like the SVMs will!)
+
+### Part 2 (5 pts.)
+
+Using your chosen classifier, create predictions for the validation data. Compare these predictions to the true labels using a **confusion matrix**. Which incorrect classifications happen most frequently?
+
+For the most commonly confused digit pairs, plot a few examples that are misclassified. What aspect of these images led to their misclassification?
+
+### Part 3 (5 pts.)
+
+Use the hidden test set to generate a prediction for each included image. Your predictions should be stored in a matrix that has the image key as the first column and the integer value of the class in the second column. Save this matrix as `Q6PredictionsMT2.csv` and include it with your final submission.
+
+Points for this question will be given with respect to classification accuracy. Let $E_i$ be the proportion of observations in the test set misclassified. Let $E_{min}$ be the minimum proportion of misclassified observations across the class. Then, you final point total for this part will be:
+
+$$5 \times \frac{E_{max}}{E_i}$$
