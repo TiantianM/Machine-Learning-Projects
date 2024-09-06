@@ -1,0 +1,231 @@
+---
+title: "Principal Components Analysis"
+author: "Tiantian Meng, Caiwei Wang, Wendy Cheng"
+date: "4/28/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Intruduction
+Principal Component Analysis (PCA) involves the process by which principal components are computed, and their role in understanding the data. Principal Components Analysis is a statistical technique used to reduce the complexity of large data sets by identifying patterns and relationships between variables.When faced with a large set of correlated variables, principal components allow us to summarize this set with a smaller number of representative variables that collectively explain most of the variability in the original set. The original variables are transformed into a new set of variables called principal components, which are linear combinations of the original variables. The first principal component accounts for the largest amount of variation in the data, the second principal component accounts for the second largest amount of variation, and so on. By retaining only the first few principal components, one can reduce the dimensionality of the dataset while preserving the most important information. 
+
+
+### Replication Requirements
+This tutorial primarily leverages the $biopsy$ data set which is Biopsy Data on Breast Cancer Patients from the MASS Package that is built into R. This breast cancer database was obtained from the University of Wisconsin Hospitals, Madison from Dr. William H. Wolberg. He assessed biopsies of breast tumours for 699 patients up to 15 July 1992; each of nine attributes has been scored on a scale of 1 to 10, and the outcome is also known.
+There are 699 rows and 11 columns. This data frame contains the following columns: 
+
+ID: sample code number (not unique).
+
+V1 clump thickness.
+
+V2 uniformity of cell size.
+
+V3 uniformity of cell shape.
+
+V4 marginal adhesion.
+
+V5 single epithelial cell size.
+
+V6 bare nuclei (16 values are missing).
+
+V7 bland chromatin.
+
+V8 normal nucleoli.
+
+V9 mitoses.
+
+class "benign" or "malignant".
+
+
+In order to use this database, we need to install the MASS package first, as follows:
+
+install.packages("MASS")
+
+Next, we will load the library:
+```{r}
+library(MASS)
+```
+
+Now, we can import the biopsy data:
+```{r}
+
+data(biopsy)
+str(biopsy)
+```
+In addition to loading the set, we’ll also use a few packages that provide added functionality in graphical displays and data manipulation. 
+```{r include=FALSE}
+library(tidyverse)  # data manipulation and visualization
+library(gridExtra)  # plot arrangement
+```
+
+
+### Preparing Our Data
+For PCA, it is often beneficial to concentrate each variable at zero, as this allows each principal component to be compared to the mean. This also eliminates the potential problem of the size of each variable. Before performing PCA, we will exclude non-numeric variables, as PCA is primarily compatible with numeric data, with some exceptions. To keep things simple, we will also use the na.omit() function to exclude observations with missing values.
+
+```{r}
+data_biopsy <- na.omit(biopsy[,-c(1,11)])
+```
+
+Now, we’re ready to conduct the analysis!
+
+#### Principal Components
+The first principal component of a data set X1, X2, ..., Xp is the linear combination of the features
+$$Z_1 = ϕ_{11}X_1\ +\ ϕ_{21}X_2\ +\ ...\ +\ ϕ_{p1}X_p\  $$
+that has the largest variance and where $ϕ_1$ is the first principal component loading vector, with elements $ϕ_{12}$, $ϕ_{22}$, ..., $ϕ_{p2}$. The $ϕ$ are normalized, which means that the summization of $ϕ_{j1}^2$ from j = 1 to p is 1. After the first principal component Z1 of the features has been determined, we can find the second principal component Z2. The second principal component is the linear combination of X1, ..., Xp that has maximal variance out of all linear combinations that are uncorrelated with Z1.
+
+The second principal component scores $Z_{12}$, $Z_{22}$, ...,  $Z_{n2}$ take the form
+$$Z_2 = ϕ_{12}X_1\ +\ ϕ_{22}X_2\ +\ ...\ +\ ϕ_{p2}X_p\ $$
+This proceeds until all principal components are computed. The elements $ϕ_{11}$, ..., $ϕ_{p1}$ in the first equation are the loadings of the first principal component. To calculate these loadings, we must find the $ϕ$ vector that maximizes the variance. It can be shown using techniques from linear algebra that the eigenvector corresponding to the largest eigenvalue of the covariance matrix is the set of loadings that explains the greatest proportion of the variability.
+
+### Principal Components Calculation and Number of Components
+```{r}
+library(factoextra)
+library(ggfortify)
+```
+
+```{r}
+biopsy_pca <- prcomp(data_biopsy, scale = TRUE)
+names(biopsy_pca)
+```
+
+We first perform principal component analysis (PCA) on the biopsy data. The prcomp() function is typically used in R for PCA analysis. In this case, the scale = TRUE argument indicates that each variable in the data_biopsy dataset should be scaled before calculating the principal components. Scaling means that each variable is transformed to have a mean of 0 and a standard deviation of 1. By scaling the variables before PCA, all variables are on the same scale and have equal importance in the PCA analysis. This step is necessary because variables with larger scales can dominate the PCA results, leading to biased or inaccurate component scores and loadings.
+
+The names of the components in the biopsy_pca object resulting from the PCA analysis:
+
+"sdev": This component represents the standard deviations of the principal components. It provides information about the amount of variance explained by each principal component. The standard deviations are sorted in decreasing order, indicating the importance of each component in explaining the variability in the data.
+
+"rotation": This component contains the loadings or weights of the original variables on each principal component. It shows the contribution of each variable to the construction of the principal components.
+
+"center": This component represents the means of the original variables before scaling. It is a vector containing the mean values of each variable in the data_biopsy dataset.
+
+"scale": This component represents the standard deviations of the original variables before scaling. It is a vector containing the standard deviation values of each variable in the data_biopsy dataset.
+
+"x": This component contains the principal component scores for each observation in the data_biopsy dataset. It represents the transformed data where the original variables have been replaced by their principal component scores.
+
+```{r}
+summary(biopsy_pca)
+```
+#### Choose Optimal Number of Components for PCA
+For a general n x p data matrix X, there are up to min(n-1, p) principal components that can be calculated. However, because the point of PCA is to significantly reduce the number of variables, we want to use the smallest number of principal components possible to explain most of the variability. The frank answer is that there is no robust method for determining how many components to use. As the number of observations, the number of variables, and the application vary, a different level of accuracy and variable reduction are desirable.
+
+```{r}
+# create a scree plot based on the results of the PCA analysis
+fviz_eig(biopsy_pca, 
+         addlabels = TRUE, 
+         ylim = c(0, 70))
+```
+It displays the percentage of variance explained by each principal component. The scree plot is useful for determining the number of principal components to retain in the analysis. Typically, we look for an significant drop in the explained variance as we move along the components, indicating the optimal number of components to retain. We can see that the method leads us to keep two components.
+
+### Interpret Results
+Visualization is essential in the interpretation of PCA results. Depending on the number of retained principal components (usually the first few), the observations expressed as component scores can be plotted in several ways. In PCA, maybe the most common and useful plots to understand the results are biplots.
+
+```{r}
+fviz_pca_biplot(biopsy_pca,
+                label="var")
+```
+
+By default, the principal components are labeled Dim1 and Dim2 on the axes with the explained variance information in the parenthesis.
+
+The direction of the arrows or vectors representing variables indicates the relationship between variables and the principal components. Variables that point in the same direction are positively correlated, while those pointing in opposite directions are negatively correlated. Meanwhile, the length of the vectors represents the importance or contribution of the variables to the principal components. Longer vectors indicate variables with higher influence on the respective principal component. Also, the angle between vectors represents the correlation between variables. Variables that have a small angle between their vectors are positively correlated, while those with a larger angle are less correlated.
+
+
+#### The Proportion of Variance Explained
+We mentioned previously that PCA reduces the dimensionality while explaining most of the variability, but there is a more technical method for measuring exactly what percentage of the variance was retained in these principal components.
+
+By performing some algebra, the proportion of variance explained (PVE) by the mth principal component is calculated using the equation:
+
+$$ PVE\ =\ \frac {\sum_{i=1}^{n} (\sum_{j=1}^{p} ϕ_{jm}x_{ij})^2} {\sum_{j=1}^{p}\sum_{i=1}^{n}x_{ij}^2} $$
+It can be shown that the PVE of the mth principal component can be more simply calculated by taking the mth eigenvalue and dividing it by the number of principal components, p. 
+
+The prcomp function also outputs the standard deviation of each principal component:
+```{r}
+biopsy_pca$sdev
+```
+
+The variance explained by each principal component is obtained by squaring these values:
+```{r}
+VE <- biopsy_pca$sdev^2
+VE
+```
+
+To compute the proportion of variance explained by each principal component, we simply divide the variance explained by each principal component by the total variance explained by all four principal components:
+```{r}
+PVE <- VE / sum(VE)
+round(PVE, 2)
+
+```
+
+We see that that the first principal component explains 66% of the variance in the data, the next principal component explains 9% of the variance, and so forth. 
+
+It is often advantageous to plot the PVE and cumulative PVE, for reasons explained in the following section of this tutorial. The plot of each is shown below:
+
+```{r}
+library(ggplot2)
+# PVE (aka scree) plot
+PVEplot <- qplot(c(1:9), PVE) + 
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("PVE") +
+  ggtitle("Scree Plot") +
+  ylim(0, 1)
+
+# Cumulative PVE plot
+cumPVE <- qplot(c(1:9), cumsum(PVE)) + 
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab(NULL) + 
+  ggtitle("Cumulative Scree Plot") +
+  ylim(0,1)
+
+grid.arrange(PVEplot, cumPVE, ncol = 2)
+
+```
+
+We can also determine how many principal components by eyeballing the scree plot. To determine the number of components, we look for the “elbow point”, where the PVE significantly drops off.
+
+### Non-negative matrix factorization
+One extension of principal component analysis is Non-negative matrix factorization (NMF). One major difference between NMF and PCA that is that NMF requires the input data to be non-negative, but data of PCA can be both positive and negative. The idea of NMF is to factorize our target matrix $n$X$m$ matrix $X$ into the product of tow non-negtaive factor matrics, an $n$X$r$ matrix $W$ and an $r$X$m$ matrix $H$ such as:
+$$X = WH$$
+The method of NMF can be applied in high dimensional data in different fields such as image processing, text mining and audio processing. 
+
+Let's work on our dataset. 
+```{r include=FALSE}
+# Load
+library(NMF)
+```
+
+```{r}
+nmf <- nmf(data_biopsy, rank = 3,seed = 123)
+# print the basis matrix (i.e., the W matrix)
+basis(nmf)
+# print the coefficient matrix (i.e., the H matrix)
+coef(nmf) 
+```
+
+```{r}
+rank_range <- 2:6
+# store the reconstruction errors
+recon_err <- rep(NA, length(rank_range))
+
+#  reconstruction error for each rank
+for (i in seq_along(rank_range)) {
+  rank <- rank_range[i]
+  nmf_fit <- nmf(data_biopsy, rank = rank)
+  recon_err[i] <- sum((data_biopsy - fitted(nmf_fit))^2)
+}
+
+recon_err
+```
+
+
+### Compare PCA and NMF
+```{r}
+library(factoextra)
+reconstruction_error_nmf <- sum((data_biopsy - fitted(nmf))^2)
+reconstruction_error_nmf
+```
+
+
