@@ -1,0 +1,401 @@
+
+---
+title: 'QTM 347 - Problem Set #7'
+author: "Caiwei Wang, Wendy Cheng, Tiantian Meng"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: no
+    toc_depth: '2'
+  html_document:
+    df_print: paged
+    toc: no
+    toc_depth: '2'
+  prettydoc::html_pretty:
+    df_print: kable
+    highlight: github
+    theme: leonids
+    toc: no
+    toc_depth: 2
+    toc_float:
+      collapsed: no
+urlcolor: blue
+---
+
+```{r, include=FALSE}
+library(ggplot2)
+library(data.table)
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning = FALSE, fig.width = 16/2, fig.height = 9/2, tidy.opts=list(width.cutoff=60), tidy=TRUE)
+```
+
+This is the eighth (and final) problem set for QTM 347.  This homework will cover applied exercises related to classification methods. 
+
+Please use the intro to RMarkdown posted in the Intro module and my .Rmd file as a guide for writing up your answers.  You can use any language you want, but I think that a number of the computational problems are easier in R.  Please post any questions about the content of this problem set or RMarkdown questions to the corresponding discussion board.
+
+Your final deliverable should be two files: 1) a .Rmd/.ipynb file and 2) either a rendered HTML file or a PDF.  Students can complete this assignment in groups of up to 3.  Please identify your collaborators at the top of your document.  All students should turn in a copy of the solutions, but your solutions can be identical to those of your collaborators.
+
+This assignment is due by April 4th, 2023 at 11:59 PM EST.  
+
+***
+
+
+# Problem 1: Jane Austen and HG Wells
+
+The data set `JaneTrain.csv` contains a collection of 2,000 lines taken from a print version of the book "Pride and Prejudice" by Jane Austen and "War of the Worlds" by H.G. Wells.  Each row corresponds to a single line from a page in one of the books and has the following attributes:
+
+  * `jane` - a character indicator that is `JAUSTEN` if the line is from Pride and Prejudice or `HGWELLS` if the line is from War of the Worlds.
+  
+  * 542 features that correspond to words that appear in the collected sentences.  For example, the first feature is "of" - this is the number of times that the word "of" appeared in the line of text.  Each feature corresponds to a single word and the feature value is the number of times that it appears in the corresponding line of text.  Note that these feature values can only take integer values **and** are limited to be greater than 0 and less than the number of words that could theoretically be printed on a single line of a book page.
+  
+We're going to use this data set to build classifiers that attempt to predict if a line of text was written by Jane Austen or H.G. Wells given the words in the sentence.
+
+Text feature sets are weird - because the features are small integer counts, there aren't too many assumptions we can viably make about the structure of the features.  In turn, generative classifiers like LDA, QDA, and Naive Bayes (at least the versions we discussed in class) will not work very well at all.  Therefore, you'll want to try a set of viable classifiers that are likely to perform well.
+
+While this data set will seem intimidating, you'll be able to apply all of the classification techniques that we've discussed in class without too much issue.
+
+```{r}
+# Load the dataset
+dataset <- read.csv("JaneTrain.csv", header = TRUE)
+```
+
+## Part 1 (30 points)
+
+Let's start by doing some basic data visualization.  Produce two tables that show the 10 most common words used by Jane Austen and the 10 most common words used by H.G. Wells in the training data set.  Given what you know about these authors and books (and the English language, in general), does this make sense?  Are there any words included here that are unlikely to **discriminate** sentences written by the two authors?
+
+### Part 1 Solution
+```{r}
+# Get the most common words used by Jane Austen
+jane_words <- colSums(dataset[dataset$jane == "JAUSTEN", 2:ncol(dataset)])
+jane_sorted <- sort(jane_words, decreasing = TRUE)
+top_10_jane <- head(jane_sorted, 10)
+
+# Get the most common words used by H.G. Wells
+wells_words <- colSums(dataset[dataset$jane == "HGWELLS", 2:ncol(dataset)])
+wells_sorted <- sort(wells_words, decreasing = TRUE)
+top_10_wells <- head(wells_sorted, 10)
+
+# Create a table of the top 10 words for Jane Austen
+jane_table <- data.frame(word = names(top_10_jane),
+                       count = as.vector(top_10_jane))
+
+# Create a table of the top 10 words for H.G. Wells
+wells_table <- data.frame(word = names(top_10_wells),
+                       count = as.vector(top_10_wells))
+
+# Print the tables
+
+print(jane_table)
+
+print(wells_table)
+```
+
+Based on my knowledge of the English language, I think it is very reasonable that these words occur most frequently. These words occur in most sentences in the English language.  "to", and "it" are less distinguishable between the two authors because they are words that do not carry characteristics or emotions and occur in most English sentences. There are also some words that distinguish the two authors. Of the top ten words in Pride and Prejudice, "she" and "was" reflect the major character and time developments in the book, and "she" is a word that clearly does not appear often in The War of the Worlds.
+
+
+
+## Part 2 (20 points)
+
+The goal of classification, more or less, is to find features that discriminate between the classes.  A good *interpretable* classifier admits a way for us to uncover these features.
+
+A first approach is to use regular old logistic regression to build the classifier.  As a product of this approach, we get **regression coefficients** that correspond to the discriminative ability of each feature.
+
+Using all of the features, train a logistic regression classifier for `jane`.  Using 5-fold CV, compute the log loss and misclassification rate of this classifier.  Store these two values for later use.
+
+Then, extract the logistic regression coefficients and find the 10 largest and 10 smallest regression coefficients.  Make a table that shows these words along with the corresponding regression coefficients.
+
+Large positive coefficient values indicate that presence of the word greatly increases the probability that the line was written by Jane Austen and large negative coefficients indicate tha the presence of the word greatly increases the probability that the line was written by H.G. Wells.
+
+Do these word lists make more sense?  Note that there are some processing inaccuracies in this data set - don't read too much into these!
+
+Note: You may get a warning message that the algorithm hasn't converged.  If you're using GLM in R, you can fix this by adding the argument `control = list(maxit = 100)` to your `glm` or `train` in `caret` call.  Don't worry about the fitted probabilities warning.
+
+Note 2: If you're using `caret`, you can access the coefficients via `coef(logit_mod$finalModel)`.
+
+### Part 2 Solution
+```{r}
+# Train logistic regression classifer
+library(caret)
+library(MLmetrics)
+```
+
+```{r}
+# 5 fold CV
+train_control <- trainControl(method = "cv", number = 5, classProbs = TRUE,
+    summaryFunction = multiClassSummary)
+```
+
+```{r}
+# train the logistic regression model
+logistic_mod <- train(jane ~ ., data = dataset, trControl = train_control,
+    method = "glm", family = binomial(link = "logit"),control = list(maxit = 100))
+logistic_mod
+```
+
+
+```{r}
+#  log loss and misclassification rate
+log<- c(logistic_mod$results$logLoss)
+mis <- 1 - c(logistic_mod$results$Accuracy)
+
+metrics_tab <- cbind(log, mis)
+colnames(metrics_tab) <- c("LogLoss", "MisclassRate")
+rownames(metrics_tab) <- c("Logistic")
+print(metrics_tab)
+
+```
+
+```{r}
+# coefficients
+coe <- coef(logistic_mod$finalModel)
+```
+
+```{r}
+# 10 largest
+sort1 <- sort(coe, decreasing = TRUE)
+largest10 <- head(sort1, 10)
+
+# 10 smallest
+sort2 <- sort(coe, decreasing = FALSE)
+smallest10 <- head(sort2, 10)
+
+```
+
+
+```{r}
+table1 <- data.frame(word = names(largest10),
+                       largest_coefficients = as.vector(largest10))
+table1
+```
+```{r}
+table2 <- data.frame(word = names(smallest10),
+                       smallest_coefficients = as.vector(smallest10))
+table2
+```
+I think these words make more sense. These terms are more specific than the 10 most frequently occurring terms listed above.Most of the previous 10 most frequently occurring words are words that are likely to appear in all English sentences. This time, however, the words are more context-specific and character-specific. These words are more feasible for determining which book the passage comes from.
+
+
+## Part 3 (20 points)
+
+This a very high dimensional feature space.  And we already know that it has a lot of *trash predictors* - words that don't discriminate at all between the two authors because they are just common English words.
+
+Let's parse down the feature set by training a **Logistic LASSO** classifier.  Tune $\lambda$ for the logistic LASSO classifier and select the value that minimized the EPE.  Then, compute a 5-fold estimate of the log loss and misclassification rate for this classifier.  Save the optimal value of $\lambda$ and the loss metrics for later.
+
+For the optimal $\lambda$, extract the logistic LASSO coefficients and find the 10 largest and 10 smallest regression coefficients.  Make a table that shows these words along with the corresponding regression coefficients.
+
+As before, large positive coefficient values indicate that presence of the word greatly increases the probability that the line was written by Jane Austen and large negative coefficients indicate tha the presence of the word greatly increases the probability that the line was written by H.G. Wells.
+
+Does this word list make more sense than the previous two?  Any intuition as to why?
+
+Note: The CV criterion for `glmnet` with the binomial family is the **deviance** - a transformation of log loss.  You can compute the loss metrics, yourself, or you can use `caret` setting $\lambda$ to the minimum (recommended).
+
+### Part 3 Solution
+
+
+```{r}
+lassoModel <- train(jane ~ ., data = dataset, method = "glmnet",family = "binomial", link = "logit", trControl = train_control, tuneGrid = expand.grid(alpha = 1, lambda = seq(0, 1, length = 500)))
+```
+
+```{r}
+# Save the optimal value of lambda  
+opt_lambda <- lassoModel $ bestTune $lambda
+# associated log loss and misclassification rate 
+lasso_loss <- lassoModel $ results $logLoss [lassoModel$results$lambda == opt_lambda]
+
+lasso_misclass <- 1 - lassoModel$results$Accuracy[lassoModel$results$lambda == opt_lambda]
+lasso_loss
+lasso_misclass
+```
+
+Now, for the optimal lambda, we extract the logistic LASSO coefficients and find the 10 largest and 10 smallest regression coefficients. 
+```{r}
+dataset1 <- read.csv("JaneTrain.csv", header = TRUE)
+library(dplyr)
+library(glmnet)
+train_x <- dataset [, -1]
+train_y <- dataset$jane
+train_y <- dplyr::recode(dataset1$jane, JAUSTEN = "1", HGWELLS = "0")
+lasso_opt <- glmnet(x = train_x, y = train_y, alpha = 1, family = "binomial", link = "logit",lambda = opt_lambda, nfolds = 5)
+```
+
+
+```{r}
+# Extract the coefficients for the optimal lambda value
+lassoCoe <- coef(lasso_opt, s = opt_lambda)
+lasso_table<- as.data.frame(as.matrix(lassoCoe))
+colnames(lasso_table) <- c( "coefficient")
+
+# Extract the 10 largest regression coefficients
+lasso_largest <- lasso_table %>% arrange(desc(coefficient))%>% slice_head(n = 10)
+lasso_largest
+```
+
+```{r}
+# Extract the 10 smallest regression coefficients
+lasso_smallest <- lasso_table %>% arrange((coefficient))%>% slice_head(n = 10)
+lasso_smallest
+```
+
+Yes, this world list makes more sense because they are more specific to each books. For example, words such as "she", "her", "elizabeth", "meryton" indicates specific name, location and gender that appears more in "Pride and Prejudice". Words such as "mars" and "martians" are words that are commonly associated with science fiction, "Dark," "big," and "behind" are also words that may be associated with science fiction, so more likely appears in the "War of the Worlds" by Wells. It makes sense that lasso logistic regression would perform better than logistic regression because there may be a large number of predictors that had no impact on the outcome variable. The model is able to filter out these unimportant features and focus on the most crucial ones by using lasso logistic regression.
+
+
+## Part 4 (10 points)
+
+Unfortunately, these two methods are the only two appropriate for this problem that admit an easy way to tell which words discriminate between the two authors.
+
+However, we can potentially improve the classification ability of the text by using a more flexible classifier.  The state of the art for text analysis is the **support vector machine**.
+
+Using the training data, train three different SVCs:
+
+  * A linear SVC.  Here, you should tune over 11 different costs - `10^(-5:5)`.
+  
+  * A SVM with a polynomial kernel.  Here, you should tune over 11 different costs - `10^(-5:5)` **and** 3 different polynomial degrees - 2, 3, and 4.
+  
+  * A SVM with a RBF kernel.  Here, you should tune over 11 different costs - `10^(-5:5)`.  However, you should leave the value of $\gamma$ as the default value; if you're using one of the recommended implementations, the default value will be pretty good.
+  
+For each of these classifiers, record the 5 fold CV estimates  of the log loss and misclassification rate **for the lowest EPE model**.  Be sure to also record the optimal values of the tuning parameters for each classifier.
+
+Note: I **highly** recommend opening a parallel backend for this particular set of classifiers.  You can see instructions for doing this in R in the classification explainer posted to Canvas.  If you have the `doParallel` package loaded, you can check the number of cores available with the function `detectCores()`.  Then, set the number of cores in your *cluster* to 1 or 2 less than your maximum number.  This will significantly speed up this training routine.
+
+
+  
+### Part 4 Solution
+
+```{r}
+# train with linear SVC
+library(doParallel)
+ncores <- detectCores()
+cl <- makeCluster(ncores - 2)
+registerDoParallel(cl)
+svm_linear_mod <- train(jane ~.,
+    data = dataset, trControl = train_control, method = "svmLinear",
+    tuneGrid = expand.grid(.C = 10^seq(-5, 5, length = 11)))
+stopCluster(cl)
+#svm_linear_mod
+```
+
+
+```{r}
+# A SVM with a polynomial kernel
+ncores <- detectCores()
+cl <- makeCluster(ncores - 2)
+registerDoParallel(cl)
+svm_poly_mod <- train(jane ~ ., data = dataset,
+    trControl = train_control, method = "svmPoly", tuneGrid = expand.grid(.C = 10^seq(-5,
+        5, length = 11), .degree = c(2, 3, 4), .scale = c(1)))
+stopCluster(cl)
+#svm_poly_mod
+```
+
+```{r}
+# a SVM with a RBF kernel
+ncores <- detectCores()
+cl <- makeCluster(ncores - 2)
+registerDoParallel(cl)
+svm_rbf_mod <- train(jane ~ ., data = dataset,
+    trControl = train_control, method = "svmRadialCost", tuneGrid = expand.grid(.C = 10^seq(-5,5, length = 11)))
+# Close out your parallel backend when you're done.
+stopCluster(cl)
+#svm_rbf_mod
+```
+
+```{r}
+# function to create loss table
+loss_table <- function(x, names, tuning = NULL) {
+    accessor <- function(y) {
+        val <- which.min(y$results$Accuracy)
+        return(c(y$results$logLoss[val], 1 - y$results$Accuracy[val]))
+    }
+    metrics <- t(sapply(x, accessor, simplify = TRUE, USE.NAMES = FALSE))
+    if (is.null(tuning) == TRUE) {
+        df <- data.frame(names, metrics)
+        names(df) <- c("", "LogLoss", "Misclass Rate")
+        rownames(df) <- NULL
+    } else {
+        if (length(names) != length(tuning)) {
+            stop("UNEQUAL VECTOR LENGTHS!!")
+        } else {
+            df <- data.frame(names, tuning, metrics)
+            names(df) <- c("", "Tuning Values", "LogLoss", "Misclass Rate")
+            rownames(df) <- NULL
+        }
+    }
+    return(df)
+}
+```
+
+```{r}
+metric_tab2 <- loss_table(x = list(svm_linear_mod, svm_poly_mod, svm_rbf_mod), names = c( "SVM - Linear", "SVM - Poly", "SVM - RBF"),
+    tuning = c("C = 0.001", "C = 0.00001; d = 2","C = 1"))
+metric_tab2
+```
+
+## Part 5 (10 points)
+
+One weakness of SVMs (and other flexible classifiers) is that there are no built-in variable selection methods.  Since we know that there are a lot of *garbage predictors* in this data set, we could probably do better if we restricted the feature set to only include features that discriminate between classes.
+
+One approach to this is to use the information we learned from the logistic LASSO to subset the features and re-run the SVM on a less noisy training set.  Looking back at your optimal LASSO coefficients, create a second training set that only includes the features that had non-zero coefficients in your optimal LASSO.
+
+Using the "best-in-class" SVM from above (probably the SVM with the RBF kernel), train a new SVM over 11 cost values on the subset feature set.  Record the associated cost, 5 fold CV estimate of the log loss and misclassification rate for this SVM.
+
+### Part 5 Solution
+```{r}
+#second training set with non-zero coefficients in LASSO
+lasso_opt <- glmnet(x = train_x, y = train_y, alpha = 1, family = "binomial", link = "logit",lambda = opt_lambda, nfolds = 5)
+
+non_zero = rownames(coef(lasso_opt, s = opt_lambda))[coef(lasso_opt, s = opt_lambda)[,1]!= 0]
+non_zero <- non_zero[-1]
+
+df_p5 <- dataset[, c(non_zero,"jane")]
+
+```
+
+According to Part 4, the best-in-class SVM is a linear SVC.
+
+```{r}
+# best-in-class SVM of subset feature 
+ncores <- detectCores()
+cl <- makeCluster(ncores - 2)
+registerDoParallel(cl)
+svm_linear_mod_p5 <- train(jane ~.,
+    data = df_p5, trControl = train_control, method = "svmLinear",
+    tuneGrid = expand.grid(.C = 10^seq(-5, 5, length = 11)))
+stopCluster(cl)
+```
+```{r}
+#svm_linear_mod_p5 
+
+```
+
+C = 0.01
+
+```{r}
+metric_tab_p5 <- loss_table(list(svm_linear_mod_p5), names = "SVM - Linear - subset", tuning = "C = 0.01")
+metric_tab_p5
+```
+## Part 6 (10 points)
+
+Make a table with 4 columns that summarizes your loss metrics for the 6 different classifiers:
+
+  * The name of the method (and the type of kernel, if applicable)
+  * The optimal values of any tuning parameters
+  * The associated log loss
+  * The associated misclassification rate
+  
+Which method performs best?  Any surprises?  What seems more important to deal with for this classification problem - meaningless features or nonlinearities and complex dependencies between the features?
+
+While not *always* applicable for text data, the result here is frequently the case in the world of text classification!
+
+### Part 6 Solution
+```{r}
+metric_tab_p6 <- loss_table(x = list(logistic_mod,lassoModel,svm_linear_mod, svm_poly_mod, svm_rbf_mod,svm_linear_mod_p5), names = c("Logistic","Lasso","SVM - Linear", "SVM - Poly", "SVM - RBF","SVM - Linear Subset"),
+    tuning = c("","lambda = 0.002","C = 0.001", "C = 0.00001; d = 2","C = 1","C = 0.01"))
+metric_tab_p6
+
+```
+
+Based on the table, it seems like the SVM-Linear model with selected subset features performs the best, with the lowest log loss (0.264) and misclassification rate (0.0965). This is not too surprising since this model is likely able to focus on the most informative features and disregard any meaningless ones.
+
+The fact that SVM-Poly and SVM-RBF performed worse than SVM linear in this particular classification problem is not necessarily surprising, as different models perform differently depending on the characteristics of the data. SVM-Poly and SVM-RBF can handle nonlinearity in the data, but can also be more prone to overfitting when dealing with noisy or sparse data, especially if the kernel parameters are not well-tuned. In contrast, SVM linear is a simpler model that assumes a linear relationship between the features and the response, and it may perform better in situations where the data has a more linear separability.
+
+Overall, it seems that dealing with meaningless features is more important for this classification problem since the SVM-Linear model with selected subset features performs the best. 
+
