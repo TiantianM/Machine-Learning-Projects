@@ -1,0 +1,368 @@
+
+---
+title: 'QTM 347 - Problem Set #7'
+author: "Caiwei Wang, Tiantian Meng, Wendy Cheng"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    toc: no
+    toc_depth: '2'
+  prettydoc::html_pretty:
+    df_print: kable
+    highlight: github
+    theme: leonids
+    toc: no
+    toc_depth: 2
+    toc_float:
+      collapsed: no
+  pdf_document:
+    toc: no
+    toc_depth: '2'
+urlcolor: blue
+---
+
+```{r, include=FALSE}
+library(ggplot2)
+library(data.table)
+library(dplyr)
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning = FALSE, fig.width = 16/2, fig.height = 9/2, tidy.opts=list(width.cutoff=60), tidy=TRUE)
+```
+
+This is the seventh problem set for QTM 347.  This homework will cover applied exercises related to classification methods. 
+
+Please use the intro to RMarkdown posted in the Intro module and my .Rmd file as a guide for writing up your answers.  You can use any language you want, but I think that a number of the computational problems are easier in R.  Please post any questions about the content of this problem set or RMarkdown questions to the corresponding discussion board.
+
+Your final deliverable should be two files: 1) a .Rmd/.ipynb file and 2) either a rendered HTML file or a PDF.  Students can complete this assignment in groups of up to 3.  Please identify your collaborators at the top of your document.  All students should turn in a copy of the solutions, but your solutions can be identical to those of your collaborators.
+
+This assignment is due by March 27th, 2023 at 11:59 PM EST.  
+
+***
+
+## Problem 1: The Multivariate Normal Distribution (30 pts.)
+
+The multivariate normal distribution is an important distribution for the study of multivariate statistical models.  Specifically, the multivariate normal distribution is one of just a few ways to parametrically specify a data generating process that encodes the covariance between pairs of random variables.  A random vector $\boldsymbol x \in \mathbb{R}^P$ is said to follow a multivariate normal distribution if:
+
+$$f(\boldsymbol x \mid \boldsymbol \mu , \Sigma) \sim \mathcal{N}_P(\boldsymbol x \mid \boldsymbol \mu , \Sigma) = (2 \pi)^{-\frac{P}{2}} \text{det}(\Sigma)^{-\frac{1}{2}} \exp \left[-\frac{1}{2} (\boldsymbol x - \boldsymbol \mu )' \Sigma^{-1} (\boldsymbol{x} - \boldsymbol \mu) \right]$$
+
+Suppose we have $N$ iid draws from an unknown multivariate normal distribution.  We can specify the joint log-likelihood as:
+
+$$\ell \ell (\boldsymbol x \mid \boldsymbol \mu , \Sigma) = -\frac{NP}{2} \log 2 \pi - \frac{N}{2} \log \text{det}(\Sigma) - \frac{1}{2} \sum \limits_{i = 1}^N (\boldsymbol x_i - \boldsymbol \mu )' \Sigma^{-1} (\boldsymbol{x}_i - \boldsymbol \mu)$$
+
+Show that the maximum likelihood estimates (e.g. finding $\boldsymbol \mu$ and $\Sigma$ that maximize the log-likelihood) of the parameters are:
+
+$$\hat{\boldsymbol \mu} = \frac{1}{N} \sum \limits_{i = 1}^N \boldsymbol{x}_i$$
+
+$$\hat{\Sigma} = \frac{1}{N} \sum \limits_{i = 1}^N (\boldsymbol x_i - \hat{\boldsymbol \mu})(\boldsymbol x_i - \hat{\boldsymbol \mu})'$$
+
+Some hints:
+
+1. I highly recommend expanding the matrix quadratic.
+
+2. Suppose we have two vectors, $\mathbf a$ and $\mathbf b$, and a conformable matrix $\mathbf A$.  If $\mathbf a' \mathbf A \mathbf b$ and $\mathbf b' \mathbf A \mathbf a$ evaluate to scalars, then $\mathbf a' \mathbf A \mathbf b = \mathbf b' \mathbf A \mathbf a$.
+
+3. Let $\gamma = y'Ay$ such that $\gamma$ evaluates to a scalar:
+  
+  $$\frac{\partial \gamma}{\partial y} = 2Ay$$
+  
+4. Let $\gamma = y'A^{-1}y$ such that $\gamma$ evaluates to a scalar:
+  
+  $$\frac{\partial \gamma}{\partial A^{-1}} = yy'$$
+  
+This arises because of a trace trick rearrangement, $\gamma = y'A^{-1}y = \text{tr}(yy'A^{-1})$
+  
+5. A well-known matrix identity is:
+  
+  $$\frac{\partial \log \text{det}(A)}{\partial A^{-1}} = -A$$
+  
+when $A$ is symmetric.
+
+6. You'll have more luck with the second one if you differentiate with respect to $\Sigma^{-1}$ rather than $\Sigma$.
+
+### Problem 1 Solution
+We have:
+
+$$\ell \ell (\boldsymbol x \mid \boldsymbol \mu , \Sigma) = -\frac{NP}{2} \log 2 \pi - \frac{N}{2} \log \text{det}(\Sigma) - \frac{1}{2} \sum \limits_{i = 1}^N (\boldsymbol x_i - \boldsymbol \mu )' \Sigma^{-1} (\boldsymbol{x}_i - \boldsymbol \mu)$$
+
+Taking the derivative of the third term with respect to $\mu$, we have:
+
+$$ \frac{\partial}{\partial \mu} [\frac{1}{2} \sum \limits_{i = 1}^N (\boldsymbol x_i - \boldsymbol \mu )' \Sigma^{-1} (\boldsymbol{x}_i - \boldsymbol \mu)] \\ =\ \frac{1}{2}\frac{\partial}{\partial \mu}[\sum \limits_{i = 1}^N (\boldsymbol x_i - \boldsymbol \mu )' \Sigma^{-1} (\boldsymbol{x}_i - \boldsymbol \mu)]$$
+We can use the chain rule to simplify the derivative inside the brackets:
+
+$$\frac{\partial}{\partial \mu}[ (\boldsymbol x_i - \boldsymbol \mu )' \Sigma^{-1} (\boldsymbol{x}_i - \boldsymbol \mu)] \\=\  \frac{\partial}{\partial (x_i-\mu)}[ (\boldsymbol x_i - \boldsymbol \mu )' \Sigma^{-1} (\boldsymbol{x}_i - \boldsymbol \mu)]\ *\ \frac{\partial}{\partial \mu}(x_i- \mu)$$
+Using the product rule, we can simplify the first term:
+
+$$\frac{\partial}{\partial (x_i-\mu)}[ (\boldsymbol x_i - \boldsymbol \mu )' \Sigma^{-1} (\boldsymbol{x}_i - \boldsymbol \mu)]\\=\ (\Sigma^{-1} \ +\ (\Sigma^{-1})')\ *\ (x_i \ -\ \mu) $$
+where $(\Sigma^{-1})'$ is the transpose of $\Sigma^{-1}$.
+
+Substituting this back into our original equation and simplifying, we have:
+
+$$\frac{\partial \ell\ell}{\partial \mu}\\=\ \Sigma(\Sigma^{-1}(x_i\ -\ \mu)) $$
+Setting this equal to zero and solving for μ, we get:
+$$ \Sigma(\Sigma^{-1}(x_i\ -\ \mu))\ =\ 0\\  \Sigma\Sigma^{-1}x_i\ -\ N\mu\Sigma^{-1}\ =\ 0 \\ \hat{\boldsymbol \mu} = \frac{1}{N} \sum \limits_{i = 1}^N \boldsymbol{x}_i$$
+
+
+Next, we take the derivative of the log-likelihood with respect to $\boldsymbol{\Sigma}$:
+$$ \frac{\partial \ell\ell}{\partial \Sigma}\ =\ \frac{\partial}{\partial \Sigma}(\frac{N}{2} \log \text{det}(\Sigma) - \frac{1}{2} \sum \limits_{i = 1}^N (\boldsymbol x_i - \boldsymbol \mu )' \Sigma^{-1} (\boldsymbol{x}_i - \boldsymbol \mu))\\ =\ -\frac{N}{2}\Sigma^{-1}\ +\ \frac{1}{2}\Sigma\Sigma^{-1}(x_i-\mu)(x_i-\mu)'\Sigma^{-1}$$
+We can simplify this expression by using the fact that $\boldsymbol{\Sigma}^{-1}$ is a symmetric matrix. Specifically, we can write $$\boldsymbol{\Sigma}^{-1} (\mathbf{x}_i - \boldsymbol{\mu}) (\mathbf{x}_i - \boldsymbol{\mu})^\top \boldsymbol{\Sigma}^{-1} = (\boldsymbol{\Sigma}^{-1} (\mathbf{x}_i - \boldsymbol{\mu})) (\boldsymbol{\Sigma}^{-1} (\mathbf{x}_i - \boldsymbol{\mu}))^\top$$
+
+Using this fact, we can rewrite the derivative as:
+$$\frac{\partial \ell\ell}{\partial \Sigma}\ =\ -\frac{N}{2}\Sigma^{-1}\ + \frac{1}{2}\Sigma^{-1}\Sigma(x_i-\mu)(x_i-\mu)'\Sigma^{-1}$$
+Setting this derivative to zero, we have:
+$$ -\frac{N}{2}\Sigma^{-1}\ + \frac{1}{2}\Sigma^{-1}\Sigma(x_i-\mu)(x_i-\mu)'\Sigma^{-1}\ =\ 0 $$
+Multiplying both sides by $\boldsymbol{\Sigma}$, we get:
+
+$$-\frac{N}{2}I\ +\ \frac{1}{2}\frac{1}{N} \Sigma(x_i-\mu)(x_i-\mu)'\ =\ 0$$
+where we have used the fact that $\boldsymbol{\Sigma}^{-1}\boldsymbol{\Sigma}=\mathbf{I}$.
+
+Solving for $\boldsymbol{\Sigma}$, we get:
+$$\hat{\Sigma} = \frac{1}{N} \sum \limits_{i = 1}^N (\boldsymbol x_i - \hat{\boldsymbol \mu})(\boldsymbol x_i - \hat{\boldsymbol \mu})'$$
+which is the maximum likelihood estimate of the covariance matrix. 
+
+
+## Problem 2: Wine Data (70 points)
+
+The Wine data set is a classic prototyping data set for classification methods.  The data set revolves around a 13 different measurements of the chemical properties of different wines that originate from three different *cultivars* (varieties of plants - in this case, grapes - that have been produced by selective breeding).  The goal of the classification task is to create a classifier for the three different *cultivars* using only the chemical properties.
+
+The Wine data set only has 178 observations, so it is too small to split into training and test splits.  Therefore, cross-validation methods are needed to approximate expected prediction error.
+
+
+## Part 1 (20 points)
+
+Let's start by making this three class problem into a two class problem.
+
+Copy the data set and recode `Class2` and `Class3` to `Class0`.  This turns the classification into a simple two class problem.
+
+Now, let's just look at two predictors - Color and OD280.  Train a logistic regression classifier, a LDA classifier, and a QDA classifier on the two class data.  Generate 10-fold cross validation estimates of the misclassification rate with respect to the Bayes' class and a corresponding log loss estimate.  As a reminder, the log loss is defined as:
+
+$$-\frac{1}{N} \sum \limits_{i = 1}^N \log \text{Pr}(\hat{y}_i = y_i)$$
+
+Create a table that compares these metrics for the three classifiers.  Which method admits the lowest expected prediction error?
+
+For each classifier, produce a plot that shows the Bayes' class as a function of Color and OD280 for the **minimum bounding box** implied by the predictors (which is just a fancy way of saying predict the class for many combinations of predictors within the minimum and maximum of each predictor).  Combine these two plots with a plot of the training data that is colored by class in a grid plot.
+
+How does the **decision boundary** differ between the 3 classifiers?  Does this explain the difference in performance given the structure of the training data?
+
+Hint: `Color` ranges from approximately 1 to 13 and `OD280` ranges from approximately 1 to 4.  There are a lot of approaches to creating the decision plots, but I think that doing a grid evaluation is easiest.  In R `expand.grid("Color" = seq(1,13,length = 200), "OD280" = seq(1,4,length = 200))` will create a data frame that can easily be passed to the `predict` method!
+
+
+### Part 1 Solution
+```{r}
+wine_1 <- read.csv("wineTrainCharacter.csv")
+# recode 
+wine <- wine_1 %>% mutate (Class = recode (Class,'Class2'= 'Class0', 'Class3'='Class0'))
+```
+
+First, we train a logistic regression classifer:
+```{r}
+# Train logistic regression classifer 
+train <- wine[, c("Class","Color", "OD280")]
+library(caret)
+library(MLmetrics)
+```
+```{r}
+# 10  fold CV 
+train_control <- trainControl(method = "cv", number = 10, classProbs = TRUE,
+    summaryFunction = multiClassSummary)
+```
+
+```{r}
+# train the logistic regression model 
+logistic_mod <- train(Class ~ Color + OD280, data = train,
+    trControl = train_control, method = "glm", family = binomial(link = "logit"))
+```
+
+We continue to train a LDA classifier and a QDA classifier. 
+```{r}
+# LDA classifier 
+lda_mod <- train(Class ~ Color + OD280, data = train,
+    trControl = train_control, method = "lda")
+# QDA classifier 
+qda_mod <- train(Class ~ Color + OD280, data = train,
+    trControl = train_control, method = "qda")
+```
+
+Now we generate a table that generate 10-fold cross validation estimates of the misclassification rate with respect to the Bayes’ class and a corresponding log loss estimate.
+
+```{r}
+logloss_tab <- c(logistic_mod$results$logLoss, lda_mod$results$logLoss,
+    qda_mod$results$logLoss)
+misclass_tab <- 1 - c(logistic_mod$results$Accuracy, lda_mod$results$Accuracy,
+    qda_mod$results$Accuracy)
+metrics_tab <- cbind(logloss_tab, misclass_tab)
+colnames(metrics_tab) <- c("LogLoss", "MisclassRate")
+rownames(metrics_tab) <- c("Logistic", "LDA", "QDA")
+```
+```{r}
+print(metrics_tab)
+```
+
+
+From the above table, we can see that QDA classifier admits the lowest expected prediction error. Next, we create plots that shows the Bayes' class as a function of Color and OD280 for the minimum bounding box implied by the predictors for each classifier. 
+```{r}
+# Create a grid for our features
+grid_df <- expand.grid("Color" = seq(1,13,length = 200), "OD280" = seq(1,4,length = 200)) 
+# Generate the Bayes' class for three classifers.
+logistic_class_pred <- predict(logistic_mod, newdata = grid_df, type = "raw")
+lda_class_pred <- predict(lda_mod, newdata = grid_df, type = "raw")
+qda_class_pred <- predict(qda_mod, newdata = grid_df, type = "raw")
+# Put them in a data.frame
+class_preds <- data.frame(grid_df, logistic_class_pred, lda_class_pred, qda_class_pred)
+
+# draw the plots 
+p1 <- ggplot(data = train, aes(x = Color, y = OD280, color = Class)) +
+    geom_point()
+p2 <- ggplot(class_preds, aes(x = Color, y = OD280, color = logistic_class_pred)) +
+    geom_point() + theme(legend.position = "none") + ggtitle("Logistic")
+p3 <- ggplot(class_preds, aes(x = Color, y = OD280, color = lda_class_pred)) +
+    geom_point() + theme(legend.position = "none") + ggtitle("LDA")
+p4 <- ggplot(class_preds, aes(x = Color, y = OD280, color = qda_class_pred)) +
+    geom_point() + theme(legend.position = "none") + ggtitle("QDA")
+cowplot::plot_grid(p1, p2, p3,p4)
+```
+
+The decision boundary for logistic regression classifier and LDA classifier is a straight line, while the decision boundary of QDA looks like a curve, not a linear boundary decision. From the first graph we also observe that the original graph is not relatively linearly separable and implies a more complex relationship than linear. This suggests that QDA performs better at capturing the true decision boundary, which is consistent with the results calculated above.
+
+## Part 2 (20 points)
+
+Still using only Color and OD280 as predictors, go back to the original 3 class data.
+Using the training data, train a multinomial logistic regression classifier, a LDA classifier, a QDA classifier, and 2 Naive Bayes classifiers - one assuming Gaussian marginals and the other assuming KDE marginals.  Create a table that shows a 10-fold CV estimate of both the the misclassification rate using the Bayes class as the prediction and the log loss for each classifier. Which method performs best for the 3-class problem?
+
+For each classifier, produce a plot that shows the Bayes' class as a function of Color and OD280 for the **minimum bounding box** implied by the predictors (which is just a fancy way of saying predict the class for many combinations of predictors within the minimum and maximum of each predictor).  Combine these 5 plots with a plot of the training data that is colored by class in a grid plot.
+
+How does the **decision boundary** differ between each of the classifiers?  Which one appears to do the best at capturing the true decision boundary within the data?
+
+### Part 2 Solution
+
+We use the original 3 class data and train the 5 classifiers. 
+
+```{r}
+train2 <- wine_1[, c("Class","Color", "OD280")]
+
+# train the multinomial logistic regression
+mnl_mod <- train(Class ~ Color + OD280, data = train2, trControl = train_control, method = "multinom",trace=0,
+                 MaxNWts = 550, tuneGrid = data.frame(.decay = 0))
+# LDA classifier
+lda_mod2 <- train(Class~ ., data = train2, trControl = train_control, method = "lda")
+# QDA classifier
+qda_mod2 <- train(Class ~ ., data = train2, trControl = train_control, method = "qda")
+# Gaussian marginals
+nb_norm_mod2 <- train(Class ~ ., data = train2, trControl = train_control, method = "naive_bayes", tuneGrid = data.frame(.usekernel = FALSE,.laplace = 0, .adjust = 1))
+# KDE marginals
+nb_kde_mod2 <- train(Class ~ ., data = train2, trControl = train_control, method = "naive_bayes", tuneGrid = data.frame(.usekernel = TRUE, .laplace = 0, .adjust = 1))
+```
+
+Now we generate a table that generate 10-fold cross validation estimates of the misclassification rate with respect to the Bayes’ class and a corresponding log loss estimate.
+```{r}
+logloss_tab2 <- c(mnl_mod$results$logLoss, lda_mod2$results$logLoss,
+    qda_mod2$results$logLoss, nb_norm_mod2$results$logLoss, nb_kde_mod2$results$logLoss)
+
+misclass_tab2 <- 1 - c(mnl_mod$results$Accuracy, lda_mod2$results$Accuracy,
+    qda_mod2$results$Accuracy, nb_norm_mod2$results$Accuracy, nb_kde_mod2$results$Accuracy)
+
+metrics_tab2 <- cbind(logloss_tab2, misclass_tab2)
+colnames(metrics_tab2) <- c("LogLoss", "MisclassRate")
+rownames(metrics_tab2) <- c("Multinom. Logistic", "LDA", "QDA", "NB - Norm",
+    "NB - KDE")
+print(metrics_tab2)
+```
+
+Actually, there is not much difference of LogLoss and Misclassification rate between each classifier. But among them, it seems that multinomial logistic regression classifier performs better. Next, we create plots that shows the Bayes' class as a function of Color and OD280 for the minimum bounding box implied by the predictors for each classifier. 
+```{r}
+# Generate the Bayes' class for three classifers.
+logistic_class_pred2 <- predict(mnl_mod, newdata = grid_df, type = "raw")
+lda_class_pred2 <- predict(lda_mod2, newdata = grid_df, type = "raw")
+qda_class_pred2 <- predict(qda_mod2, newdata = grid_df, type = "raw")
+nb_norm_class_pred <- predict(nb_norm_mod2, newdata = grid_df,type = "raw")
+nb_kde_class_pred <- predict(nb_kde_mod2, newdata = grid_df, type = "raw")
+
+# Put them in a data.frame
+class_preds2 <- data.frame(grid_df, logistic_class_pred2, lda_class_pred2,
+    qda_class_pred2, nb_norm_class_pred, nb_kde_class_pred)
+```
+
+```{r}
+# draw the plots 
+p11 <- ggplot(data = train2, aes(x = Color, y = OD280, color = Class)) +
+    geom_point()
+p22 <- ggplot(class_preds2, aes(x = Color, y = OD280, color = logistic_class_pred2)) +
+    geom_point() + theme(legend.position = "none") + ggtitle("Multinomial Logistic")
+p33 <- ggplot(class_preds2, aes(x = Color, y = OD280, color = lda_class_pred2)) +
+    geom_point() + theme(legend.position = "none") + ggtitle("LDA")
+p44 <- ggplot(class_preds2, aes(x = Color, y = OD280, color = qda_class_pred2)) +
+    geom_point() + theme(legend.position = "none") + ggtitle("QDA")
+
+p55 <- ggplot(class_preds2, aes(x = Color, y = OD280, color = nb_norm_class_pred)) +
+    geom_point() + theme(legend.position = "none") + ggtitle("NB - Norm")
+p66 <- ggplot(class_preds2, aes(x = Color, y = OD280, color = nb_kde_class_pred)) +
+    geom_point() + theme(legend.position = "none") + ggtitle("NB - KDE")
+
+cowplot::plot_grid(p11, p22, p33,p44,p55,p66)
+```
+
+The decision boundaries of multinomial logistics regression classifier and LDA classifier are straight line while QDA and NB with guassian marginals have a more wiggle line, and the boundary boundary for NB with KDE marginals are the most wiggle. The boundary of original graph is not relatively linearly separable, but it's also not very wiggle. By comparing these graphs, it seems that QDA and NB with guassian marginals perform relatively better at capturing the true decision boundary. 
+
+## Part 3 (20 points)
+
+Now, let's work with all 13 predictors.  The goal of this exercise is to build a model that best predicts out of sample wines, so use 10-fold cross validation to compute the log loss and misclassification rate with respect to the Bayes class for the same five classifiers outlined in part 2.  Create a table that summarizes your results.
+
+Which model performs best?  Worst?  Do the two metrics disagree?
+
+Provide some logic for your results.  What do you think this implies about the decision boundaries and misclassified points?
+
+### Part 3 Solution
+
+```{r}
+train <- read.csv("wineTrainCharacter.csv")
+train_control <- trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = multiClassSummary)
+# multinomial logistic regression
+mnl_mod_p3 <- train(Class ~ ., data = train, trControl = train_control, method = "multinom",trace=0, MaxNWts = 550, tuneGrid = data.frame(.decay = 0))
+# lda
+lda_mod_p3 <- train(Class ~ ., data = train, trControl = train_control,
+    method = "lda")
+qda_mod_p3 <- train(Class ~ ., data = train, trControl = train_control,
+    method = "qda")
+# usekernel = FALSE for normal marginals
+nb_norm_mod_p3 <- train(Class ~ ., data = train, trControl = train_control,
+    method = "naive_bayes", tuneGrid = data.frame(.usekernel = FALSE,
+        .laplace = 0, .adjust = 1))
+# usekernel = TRUE for KDE marginals
+nb_kde_mod_p3 <- train(Class ~ ., data = train, trControl = train_control,
+    method = "naive_bayes", tuneGrid = data.frame(.usekernel = TRUE,
+        .laplace = 0, .adjust = 1))
+```
+
+```{r}
+# table summary
+logloss_tab_p3 <- c(mnl_mod_p3$results$logLoss, lda_mod_p3$results$logLoss,
+    qda_mod_p3$results$logLoss, nb_norm_mod_p3$results$logLoss, nb_kde_mod_p3$results$logLoss)
+
+misclass_tab_p3 <- 1 - c(mnl_mod_p3$results$Accuracy, lda_mod_p3$results$Accuracy,
+    qda_mod_p3$results$Accuracy, nb_norm_mod_p3$results$Accuracy, nb_kde_mod_p3$results$Accuracy)
+
+metrics_tab_p3 <- cbind(logloss_tab_p3, misclass_tab_p3)
+colnames(metrics_tab_p3) <- c("LogLoss", "MisclassRate")
+rownames(metrics_tab_p3) <- c("Multinom. Logistic", "LDA", "QDA", "NB - Norm",
+    "NB - KDE")
+library(kableExtra)
+kable(round(metrics_tab_p3, 3)) %>%
+    kable_styling("striped") %>%
+    scroll_box(width = "100%")
+```
+
+The results suggest that the QDA model is the best performing model in terms of both log loss and misclassification rate. This implies that the decision boundaries between the classes are likely to be more complex and non-linear, and that the QDA model is better able to capture these non-linear relationships between the predictors and the response variable. On the other hand, the multinomial logistic model is the worst performing model in terms of both metrics. It is likely that the model is not well-suited for this task given the large number of predictors and complex decision boundaries. The multinomial logistic model assumes a linear relationship between the predictors and the outcome variable, and may not be able to capture the complex non-linear decision boundaries between the wine classes.
+
+It is also interesting to note that the two metrics generally agree in terms of which models perform best and worst. This suggests that the misclassified points are likely to be spread relatively evenly across the data, rather than being concentrated in certain areas.
+
+## Part 4 (10 points)
+
+Broadly discuss situations where Naive Bayes is likely to outperform QDA.  Further, discuss when LDA and standard logistic regression methods may outperform the more flexible approaches.
+
+For the comparison of Naive Bayes to QDA, consider both the assumed structure of the features **and** computational scaling considerations - think about how many parameters must be computed to train a QDA classifiers as opposed to a Naive Bayes classifier.
+  
+### Part 4 Solution
+
+Naive Bayes is a simple but efficient classification algorithm that works well with high-dimensional features. It is particularly useful when the assumptions of feature independence hold true, since it assumes that the features are conditionally independent given the class label. This assumption reduces the number of parameters that need to be estimated compared to QDA, making it more computationally efficient in cases of high-dimensional feature spaces. Naive Bayes can also be more robust than QDA when the sample size is small, as it has fewer parameters to estimate. And QDA is a more flexible classification algorithm that can capture more complex dependencies among the features. It can perform well when the feature independence assumption is not valid. However, QDA requires the estimation of more parameters than Naive Bayes, making it less robust in high-dimensional feature spaces or small sample sizes. The choice of classification algorithm depends on the nature of the problem and the assumptions made about the data. Naive Bayes can outperform QDA in high-dimensional feature spaces or small sample sizes when the feature independence assumption holds true. QDA can perform better than Naive Bayes when the feature independence assumption is not valid and more complex dependencies exist among the features.
+
+LDA and standard logistic regression are linear classification models that assume linear decision boundaries between classes. LDA assumes that the variance-covariance matrix of the features is the same for all classes, while logistic regression does not make any assumptions about the variance-covariance matrix. In cases where the decision boundary is linear and the assumptions of LDA or logistic regression are met, they can outperform more flexible models such as QDA or nonlinear models such as decision trees or neural networks. They can also be more computationally efficient and easier to interpret than more complex models. LDA and logistic regression can outperform more flexible models in cases where the decision boundary is linear and the assumptions of the models are met.
+
