@@ -1,0 +1,443 @@
+
+---
+title: 'Problem Set #4'
+author: "Caiwei Wang, Tiantian Meng, Wendy Cheng"
+date: "February 2nd, 2023"
+output:
+  html_document:
+    toc: no
+    toc_depth: '2'
+    df_print: paged
+  prettydoc::html_pretty:
+    df_print: kable
+    theme: leonids
+    highlight: github
+    toc: no
+    toc_depth: 2
+    toc_float:
+      collapsed: no
+  pdf_document:
+    toc: no
+    toc_depth: '2'
+urlcolor: blue
+---
+
+```{r, include=FALSE}
+library(ggplot2)
+library(glmnet)
+library(data.table)
+library(dplyr)
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning = FALSE, fig.width = 16/2, fig.height = 9/2, tidy.opts=list(width.cutoff=60), tidy=TRUE)
+```
+
+This is the fourth problem set for QTM 347.  This homework will cover applied exercises related to predictor selection for linear regression models. 
+
+Please use the intro to RMarkdown posted in the Intro module and my .Rmd file as a guide for writing up your answers.  You can use any language you want, but I think that a number of the computational problems are easier in R.  Please post any questions about the content of this problem set or RMarkdown questions to the corresponding discussion board.
+
+Your final deliverable should be two files: 1) a .Rmd/.ipynb file and 2) either a rendered HTML file or a PDF.  Students can complete this assignment in groups of up to 3.  Please identify your collaborators at the top of your document.  All students should turn in a copy of the solutions, but your solutions can be identical to those of your collaborators.
+
+This assignment is due by February 10th, 2023 at 11:59 PM EST.  
+
+***
+
+# Problem 1: A Cool Ridge and LASSO Identity (30 pts)
+
+There is a relationship between the optimal solutions for the regression coefficients under no penalty (the OLS solution), the ridge penalty, and the LASSO penalty.  The exact relationship cannot be derived for most cases, but we can gain some knowledge by assuming that the predictors are exactly orthogonal to one another.  Since we can always rescale the variance of the features, we can further restrict this to feature sets that have **orthonormal** columns - $\boldsymbol{X'X} = \mathcal{I}_P$.
+
+Recall that OLS, Ridge, and LASSO are all solutions to slightly modified loss functions given a vector of training outcomes, $\mathbf y$, and a $N \times P$ matrix of training features, $\mathbf X$:
+
+$$\hat{\boldsymbol \beta}_O = \underset{\boldsymbol \beta^*}{\text{argmin  }} (\mathbf y - \mathbf X \boldsymbol \beta^*)'(\mathbf y - \mathbf X \boldsymbol \beta^*)$$
+
+$$\hat{\boldsymbol \beta}_R = \underset{\boldsymbol \beta^*}{\text{argmin  }} (\mathbf y - \mathbf X \boldsymbol \beta^*)'(\mathbf y - \mathbf X \boldsymbol \beta^*) + \lambda \sum \limits_{i = 1}^N \beta^{*2}_j$$
+
+$$\hat{\boldsymbol \beta}_L = \underset{\boldsymbol \beta^*}{\text{argmin  }} (\mathbf y - \mathbf X \boldsymbol \beta^*)'(\mathbf y - \mathbf X \boldsymbol \beta^*) + \lambda \sum \limits_{i = 1}^N |\beta^{*}_j|$$
+
+Assuming the feature matrix, $\boldsymbol{X}$, has orthonormal columns, show that:
+
+$$\hat{\boldsymbol \beta}_{O} = \mathbf{X}' \mathbf y$$ 
+
+$$\hat{\boldsymbol \beta}_{R} = \frac{\hat{\boldsymbol \beta}_{O}}{1 + \lambda}$$ 
+
+$$\hat{\boldsymbol \beta}_{L} = \text{sign}(\hat{\boldsymbol \beta}_{O}) \times \text{max}\left(|\hat{\boldsymbol \beta}_{O}| - \frac{\lambda}{2} , 0\right)$$
+where $\text{sign}(\cdot)$ returns the sign of the input and $\text{max}(\cdot)$ returns the maximum of the two arguments.  This definition can also be written as:
+
+$$
+\hat{\boldsymbol \beta}_{L,j} = 
+\begin{cases}
+  0  & \text{if } \hat{\boldsymbol \beta}_{O,j} \le \frac{\lambda}{2} \\
+  \hat{\boldsymbol \beta}_{O,j} - \frac{\lambda}{2} & \text{if } \hat{\boldsymbol \beta}_{O,j} > \frac{\lambda}{2}
+\end{cases}
+$$
+
+
+Notes/Hints:
+
+  1. $\sum \limits_{j = 1}^P \beta_j^2$ can also be expressed as $\beta'\beta$.
+  
+  2. Suppose we have $\beta' A \beta + \beta' (\lambda\mathcal I)\beta$.  We can condense this to $\beta' (A + \lambda \mathcal I) \beta$.
+  
+  3. Expand the OLS part of the loss function first and then substitute $\hat{\beta}_{O} = \mathbf{X'y}$.
+  
+  4. Let $\mathbf q$ and $\mathbf w$ both be $P$-vectors.  $\mathbf q' \mathbf w = \sum \limits_{j = 1}^P q_j w_j$.
+  
+  5. After your initial expansion of the LASSO loss function and substituting $\hat{\beta}_{O} = \mathbf{X'y}$, you'll want to switch from vector notation to summations so you can include the LASSO penalty term inside the summation.  Showing the identity holds for any specific element of the coefficient vector is a sufficient proof. 
+  
+  6. **Important**: In the orthogonal case, it is always the case that $\text{sign}(\hat{ \boldsymbol \beta}_O) = \text{sign}(\hat{ \boldsymbol \beta}_L)$.  You can substitute these two terms freely, but you'll have to reconcile this identity at the end of your proof - this is where the $\text{max}(\cdot)$ comes in.
+  
+  7. These solutions can be found online and in various textbook resources.  I think this is a great exercise for thinking through complex minimization problems, so don't spoil yourself unless you really find yourself stuck.
+  
+### Problem 1 Solution
+
+#### To Prove $\hat{\boldsymbol \beta}_{O} = \mathbf{X}' \mathbf y$ :
+
+We have $$\hat{\boldsymbol \beta}_O = \underset{\boldsymbol \beta^*}{\text{argmin  }} (\mathbf y - \mathbf X \boldsymbol \beta^*)'(\mathbf y - \mathbf X \boldsymbol \beta^*)$$
+
+$$S(\boldsymbol \beta^*) = \left[ \left(\boldsymbol{y} - \boldsymbol{X}\boldsymbol{\beta}^*  \right)' \left(\boldsymbol{y} - \boldsymbol{X}\boldsymbol{\beta}^*  \right) \right] \\ =  \boldsymbol{y}'\boldsymbol{y}\ - \boldsymbol{y}'\boldsymbol{X}\boldsymbol{\beta}^*\ -\boldsymbol{\beta}^{*'}\boldsymbol{X}'\boldsymbol{y}\ + \boldsymbol{\beta}^{*'}\boldsymbol{X}'\boldsymbol{X}\boldsymbol{\beta} \\ =  \boldsymbol{y}'\boldsymbol{y}\ - 2 \boldsymbol{\beta}^{*'}\boldsymbol{X}'\boldsymbol{y}\ + \boldsymbol{\beta}^{*'}\boldsymbol{X}'\boldsymbol{X}\boldsymbol{\beta}\ , \;\;\;\;\;\;\; (we\ have: \boldsymbol{y}'\boldsymbol{X}\boldsymbol{\beta}\ =\ (\boldsymbol{y}'\boldsymbol{X}\boldsymbol{\beta})'\  =\ \boldsymbol{\beta}'\boldsymbol{X}'\boldsymbol{y}) \\$$
+
+To find the $\hat{\boldsymbol{\beta}}$ that minimizes the sum of squared errors, take derivative of function 'S' with respect to $\boldsymbol \beta^*$:
+
+$$ \frac{\partial a'b}{\partial b}\ =  \frac{\partial b'a}{\partial b} \ =\ a; \\ \frac{\partial b'Ab}{\partial b}\ =  2Ab\ =\ ab'A; \\ \frac{\partial 2\boldsymbol{\beta}^{*'}xy}{\partial \boldsymbol{\beta}}\ =\ \frac{\partial 2\boldsymbol{\beta}^{*'}(x'y)}{\partial \boldsymbol{\beta}} \ =\ 2X'y; \\ \frac{\partial \boldsymbol{\beta}^{*'}\boldsymbol{X}'\boldsymbol{X}\boldsymbol{\beta}}{\partial \boldsymbol{\beta}^{*}}\ =\ \frac{\partial \boldsymbol{\beta}^{*'}A\boldsymbol{\beta}^{*}}{\partial \boldsymbol{\beta}^{*}}\ = \ 2A\boldsymbol{\beta}^{*}\ = \ 2X'X\boldsymbol{\beta}^{*}$$
+$$\frac{\partial S}{\partial \boldsymbol{\beta}^{*}}\ = \ -2\boldsymbol{X}'\boldsymbol{y}\ + \ 2\boldsymbol{X}'\boldsymbol{X}\boldsymbol{\beta}^{*}$$
+To check this is a minimum, take derivative again with $\boldsymbol \beta^*$, as long as X has full rank, this is a positive definite matrix and a min.
+
+$$ -2\boldsymbol{X}'\boldsymbol{y}\ + \ 2\boldsymbol{X}'\boldsymbol{X}\boldsymbol{\beta}^{*} \ =\ 0 \\ (\boldsymbol{X}'\boldsymbol{X})\boldsymbol{\beta}^{*} \ = \  \boldsymbol{X}'\boldsymbol{y}$$
+Since we assume the feature matrix, X, has orthonormal columns, so we can get:
+$$ (\boldsymbol{X}'\boldsymbol{X}) \ = \ I $$
+
+So we can get:
+$$ I\boldsymbol{\beta}^{*}\ = \ \boldsymbol{X}'\boldsymbol{y} $$
+
+Finally we get:
+$$\hat{\boldsymbol \beta}_{O}\ =\ \boldsymbol{X}'\boldsymbol{y} $$
+
+#### To prove $\hat{\boldsymbol \beta}_{R} = \frac{\hat{\boldsymbol \beta}_{O}}{1 + \lambda}$ :
+
+$$ S(\boldsymbol \beta^*)\ =\  (\mathbf y - \mathbf X \boldsymbol \beta^*)'(\mathbf y - \mathbf X \boldsymbol \beta^*) + \lambda \sum \limits_{i = 1}^N \beta^{*2}_j \\ =\ \boldsymbol{y}'\boldsymbol{y}\ - \boldsymbol{y}'\boldsymbol{X}\boldsymbol{\beta}^*\ -\boldsymbol{\beta}^{*'}\boldsymbol{X}'\boldsymbol{y}\ + \boldsymbol{\beta}^{*'}\boldsymbol{X}'\boldsymbol{X}\boldsymbol{\beta} \ + \lambda\boldsymbol{\beta}^{*'}\boldsymbol{\beta}^*$$
+
+
+Now, as we want to minimize J by setting: 
+
+$$\frac{\partial S}{\partial \boldsymbol{\beta}^{*}}\ = -y'X\ -\ y'X\ +\ 2X'X\beta^*\ +\ 2\lambda\beta^* \\ =\ -2X'y + 2(X'X + \lambda I)\beta^*  $$
+
+Now set this derivative equal to zero, we get:
+
+$$ -2X'y + 2(X'X + \lambda I)\beta^*\ =\ 0 \\ X'y\ =\ (X'X + \lambda I)\beta^* $$
+
+Since we are ssuming the feature matrix, X, has orthonormal columns, so $X'X = I$:
+
+$$ \beta^*\ =\ (I\ +\ \lambda I)X'y \\ =\ (1\ +\ \lambda)^{-1}\hat{\boldsymbol \beta}_{O}$$
+
+So finally we have:
+$$ \hat{\boldsymbol \beta}_{L}\ =\ \frac{\hat{\boldsymbol \beta}_{O}}{1 + \lambda}$$
+
+#### To Prove $\hat{\boldsymbol \beta}_{L} = \text{sign}(\hat{\boldsymbol \beta}_{O}) \times \text{max}\left(|\hat{\boldsymbol \beta}_{O}| - \frac{\lambda}{2} , 0\right)$ :
+
+$$ \hat{\boldsymbol \beta}_{L}\ =\ y'y\ -\ y'X\beta^*\ -\ \beta^{*'}X'y\ +\ \beta^{*'}X'X\beta^*\ +\ \lambda\sum \limits_{i = 1}^N |\beta^{*}_j| \\ =\ y'y\ -\ 2\beta^{*'}X'y\ +\ \beta^{*'}X'X\beta^*\ +\  \lambda\sum \limits_{i = 1}^N |\beta^{*}_j| \\ =\ y'y\ -\ 2\beta^{*'}\hat{\boldsymbol \beta}_{O}\ +\ \beta^{*'}\beta\ +\ \lambda\sum \limits_{i = 1}^N |\beta^{*}_j| \\ =\ y'y\ -2\sum \beta^{*}_j\hat{\boldsymbol \beta}_{O,j}\ +\ \sum \beta^{*2}_j\ +\ \lambda\sum |\beta^{*}_j|\ $$
+
+Take differentiation:
+
+For the differentiation of $|\beta^{*}_j|$, it would be 1 if $\beta^{*}_j$ is positive, would be 0 if $\beta^{*}_j$ is 0, and would be negative if $\beta^{*}_j$ is negative. So we get the solution for the differentiation of it: sign(\beta^{*}_j).
+
+$$\frac{\partial}{\partial \boldsymbol{\beta}^{*}}\ =\ -2\hat{\boldsymbol \beta}_{O,j}\ +\ 2\beta^{*}_j\ +\ \lambda*sign(\beta^{*}_j) $$
+
+To minimum the solution, we set the derivative to zero, then:
+
+$$ -2\hat{\boldsymbol \beta}_{O,j}\ +\ 2\beta^{*}_j\ +\ \lambda*sign(\beta^{*}_j)\ =\ 0 \\ \hat{\boldsymbol \beta}_{L,j}\ =\  \hat{\boldsymbol \beta}_{O,j}\ -\ \frac{\lambda}{2}sign(\beta^{*}_j) $$
+
+Since we have the important hints, this is the orthogonla case, so make the substitution (because of the important hint that the two coefficients must always be the same sign):
+
+$$\hat{\boldsymbol \beta}_{L,j}\ =\  \hat{\boldsymbol \beta}_{O,j}\ -\ \frac{\lambda}{2}sign(\beta^{*}_{O,j}) $$
+
+We said the sign was equivalent and must be true. Thus, this must always be true. There are three possibility values for the $\beta^{*}_{O,j}$, positive, negative, and 0. If it is positive, but $\frac{\lambda}{2}$ is larger than the size of the coefficient, then the $\hat{\boldsymbol \beta}_{L,j}$ would be negative (we don't want to see). So, we need to fix that by limiting the Lasso coefficient's value to be zero if this would happen, so we get:
+
+$$
+\hat{\boldsymbol \beta}_{L,j} = 
+\begin{cases}
+  0  & \text{if } \hat{\boldsymbol \beta}_{O,j} \le \frac{\lambda}{2} \\
+  \hat{\boldsymbol \beta}_{O,j} - \frac{\lambda}{2} & \text{if } \hat{\boldsymbol \beta}_{O,j} > \frac{\lambda}{2}
+\end{cases}
+$$
+
+
+
+
+
+
+```{r}
+train <- read.csv("office_train.csv")
+test <- read.csv("office_test.csv")
+# drop observation features
+train <- select(train, -c("episode","episode_name"))
+test <- select(test, -c("episode","episode_name"))
+```
+
+
+# Problem 2: Applying Ridge and LASSO
+
+Ridge and LASSO are great methods for parsing through data sets with lots of predictors to find:
+
+  1. An interpretable set of *important* predictors - which predictors are **signal** and which ones are just **noise**
+  2. The set of parameters that minimize expected prediction error (with all the caveats that we discussed in the previous lectures)
+  
+Where these methods really shine for purpose 1 (and purpose 2, by construction) is when the ratio of predictors to observations approaches 1.  To see this and work through an example using pre-built software, let's try to build a model that predicts IMDB ratings for episodes of the Office (the U.S. Version).  `office_train.csv` includes IMDB ratings (`imdb_rating`) for 115 episodes of the office and a number of predictors for each episode:
+
+  1. The season of the episode (1 - 9, which should be treated as an unordered categorical variable!)
+  2. The number of times main characters speak in the episode (`andy` through `jan`)
+  3. The director of the episode (`ken_kwapis` through `justin_spitzer`) already "dummied out" so that a 1 means the person directed the episode and a 0 means they did not
+  
+Let's use this data to build a predictive model for IMDB ratings and check our predictive accuracy on the heldout test set (`office_test.csv`).
+
+For this problem, you can restrict your search to the set of standard linear models (e.g. no interactions, no basis expansions, etc.).  If you would like to try to include more terms to improve the model, you are more than welcome to try!
+
+**An important step: Get rid of any features in both data sets that are observation specific, like episode number and episode name!** 
+
+## Part 1 (10 pts)
+
+Start by limiting yourself to the standard OLS model.   
+
+Find the regression coefficients that minimize the training error under squared error loss and use this model to compute a LOOCV estimate of the expected prediction error using all features.
+
+Which predictors appear to be important?  Which ones don't?  This can be difficult to tell from the OLS estimates!
+
+Hint:
+
+You can compute LOOCV for OLS with a formula!
+
+$$LOOCV = \frac{1}{N}\sum \limits_{i = 1}^N \left(\frac{y_i - \hat{y}_i}{1 - H_{i,i}} \right)^2$$
+where $H_{i,i}$ is the $i$'th diagonal element of the hat matrix.  In R, you can get the diagonal of the hat matrix for a fitted linear regression model using `hatvalues(ols_mod)`.  In Python, you can get the diagonal of the hat matrix for a linear regression fit with `statsmodels` by first computing the influence matrix and then getting the diagonal elements of the hat matrix `.get_influence().hat_matrix_diag`.
+
+### Part 1 Solution
+```{r}
+# dummy out the season variable
+train_du <- model.matrix(~., data=train)[,-1]
+train_new <- as.data.frame(train_du)
+```
+
+
+```{r}
+ols_mod <- lm(imdb_rating~., data=train_new)
+summary(ols_mod)
+```
+
+```{r}
+# LOOCV estimate
+loocv_ols <- mean(((ols_mod$residuals)/(1 - hatvalues(ols_mod)))^2)
+print(paste("LOOCV Estimate for OLS is ", loocv_ols))
+```
+
+From the summary table, by simply looking at the p-values that are smaller than 0.05 (have * beside the p-values),
+whether the season of the episode is 2, 3, 5, 7, variables "jim", "kelly", "michael", "greg_daniels", "b_j_novak", "paul_lieberstein", "mindy_kaling", "brent_forrester", "justin_sptzer" appear to be important. Predictors other than these appear to be not important. 
+
+
+## Part 2 (10 pts)
+
+Select a subset of "important" predictors and find the set of coefficients that minimizes MSE under squared error loss.  Compute the LOOCV estimate of the expected prediction error for your smaller model.  How does this LOOCV estimate compare to the LOOCV for the full model?
+
+Note: You don't need to try to perform any subset selection in this step.  Just use heuristic methods to determine which coefficients appear to be important for the model!
+
+### Part 2 Solution
+
+
+```{r}
+# new dataframe that have only "important"predictors 
+train2 <- train_new%>%select(c("seasonSeason 2","seasonSeason 3","seasonSeason 5","seasonSeason 7","jim","kelly","michael","greg_daniels","b_j_novak","paul_lieberstein","mindy_kaling","brent_forrester","justin_spitzer","imdb_rating"))
+
+```
+
+
+```{r}
+# compute new LOOCV estimate for smaller model 
+ols_mod2 <- lm(imdb_rating~., data=train2)
+loocv_ols_2 <- mean(((ols_mod2$residuals)/(1 - hatvalues(ols_mod2)))^2)
+loocv_ols_2
+```
+
+As we can see, the LOOCV estimate of the expected prediction error for the smaller model is 0.198, smaller than the estimate of 0.247 for the full model. 
+
+
+## Part 3 (20 pts.)
+
+Now, consider ridge regression.  Using a pre-built implementation of ridge regression, train the model using a large number of possible values for $\lambda$.  
+
+Using $10$-fold cross validation, find a reasonable value of $\lambda$ that should minimize the expected prediction error.  You can choose the actual minimum or a slightly less complex model.  Defend this choice.
+
+Create a plot that demonstrates the regression coefficients for the ridge regression with your optimal choice of $\lambda$.  Which predictors are important?  Which ones are not?  I recommend using a sideways bar plot - you can see an example construction [here](https://dk81.github.io/dkmathstats_site/rvisual-sideways-bargraph.html).
+
+Notes:
+
+  1. To make your training set work with `glmnet`, you need to divide the training set into a $N \times P$ matrix of predictors and a $N$-vector of outcome values.  The predictor matrix **must be a matrix (not a data frame)** to work with `glmnet`.  You can always convert a data frame to a matrix using `as.matrix()` in R.
+  
+  2. `season` is coded as a character string in the original data set.  You need to create a series of dummy variables for this character string in order to have the appropriate feature matrix.  Instructions for one-hot encoding the feature matrix can be found in the Regularized Regression explainer on Canvas.
+  
+  3. To plot out the coefficients at your chosen value of $\lambda$, you need to extract the optimal coefficients.  You can do this following the code examples in the explainer.
+  
+  4. If you have a better plot idea than a sideways bar plot, go for it!
+
+### Part 3 Solution
+```{r}
+train_pred <- as.matrix(train_new[,1:35])
+train_out <- as.matrix(train_new[,36])
+```
+
+
+```{r}
+ridge_mod <- glmnet(x = train_pred, y = train_out, alpha = 0,nfolds=10)
+plot(ridge_mod, xvar = "lambda")
+# Plot the lambda path for the ridge model
+lbs_fun <- function(fit, ...) {
+    L <- length(fit$lambda)
+    x <- log(fit$lambda[L])
+    y <- fit$beta[, L]
+    labs <- names(y)
+    text(x, y, labels = labs, ...)
+}
+lbs_fun(ridge_mod, cex = 0.5)
+```
+
+
+
+```{r}
+ridge_cv <- glmnet::cv.glmnet(x=train_pred, y=train_out, alpha = 0, nfolds = 10)
+plot(ridge_cv)
+```
+```{r}
+ridge_cv$lambda.min
+```
+
+```{r}
+ridge_cv
+```
+
+```{r}
+ridge_cv$glmnet.fit$beta[, which(ridge_cv$lambda == ridge_cv$lambda.min)]
+ridge_coefs <- predict(ridge_mod, type = "coefficients", s = ridge_cv$lambda.min)
+```
+
+```{r}
+a <- as.matrix(ridge_coefs)
+b <- as.data.frame(t(a))
+b_t <- transpose(b)
+r_c = cbind(colnames(b), b_t)
+r_c = r_c[-1,]
+names(r_c)=c("coefficients","value")
+```
+
+
+```{r}
+#Sideways Bar Graph
+ggplot(data = r_c, aes(x = coefficients, y =abs(value))) +
+ geom_bar(stat = "identity", width = 0.75) +
+ coord_flip() +
+ labs(x = "\n coefficients \n", y = "\n value \n", title = "\n Regression Coefficients for the Ridge Regression \n") +
+ theme(plot.title = element_text(hjust = 0.5, size = 15), 
+ axis.title.x = element_text(face="bold", colour="red", size = 12),
+ axis.title.y = element_text(face="bold", colour="red", size = 12))
+```
+
+We choose the value of λ that should minimize the expected prediction error that is the actual minimum, as we would like to see improvement of ridge from the OLS model, and a slightly less complex model may run faster, but can not guarantee improvement in expected prediction error.
+
+Referring to the sideway barplot, the ones with longer bars appears to be more important than those with short bars. We state that predictors including season(3,4,5,6,7,8,9), randall_einhorn, paul_lieberstein, paul_feig,greg_daniels, and gene_stupnitsky are important with a relatively high value of coefficient. While those with a value near zero would be not important, such as toby, ryan, pam, oscar, michael, kevin, jim, jennifer_celotta, jeffrey_blitz, jan, rtin, dwight, darryl, angela, andy.
+
+## Part 4 (20 pts.)
+
+Finally, consider linear regression with the LASSO penalty.  Using a pre-built implementation, train the model using a large number of possible values for $\lambda$. 
+
+Using $10$-fold cross validation, find a reasonable value of $\lambda$ that should minimize the expected prediction error.  You can choose the actual minimum or a slightly less complex model (smaller $\lambda$ is less complex).  Defend this choice.
+
+Create a plot that demonstrates the regression coefficients for the LASSO regression with your optimal choice of $\lambda$.  Which predictors are important?  Which ones are not?
+
+### Part 4 Solution
+```{r}
+lasso_mod_cv <- glmnet::cv.glmnet(x=train_pred, y=train_out, alpha = 1, nfolds = 10)
+plot(lasso_mod_cv)
+```
+
+```{r}
+# print the minimum EPE lambda
+lasso_mod_cv$lambda.min
+```
+
+```{r}
+# coefficient values
+lasso_mod_cv$glmnet.fit$beta[, which(lasso_mod_cv$lambda == lasso_mod_cv$lambda.min)]
+```
+```{r}
+lasso_coefs <- predict(lasso_mod_cv, type = "coefficients", s = lasso_mod_cv$lambda.min)
+```
+```{r}
+l <- as.matrix(lasso_coefs)
+k <- as.data.frame(t(l))
+k_t <- transpose(k)
+l_c = cbind(colnames(k), k_t)
+l_c = l_c[-1,]
+names(l_c)=c("coefficients","value")
+```
+```{r}
+#Sideways Bar Graph
+ggplot(data = l_c, aes(x = coefficients, y = abs(value))) +
+ geom_bar(stat = "identity", width = 0.75) +
+ coord_flip() +
+ labs(x = "\n coefficients \n", y = "\n value \n", title = "\n Regression Coefficients for the LASSO Regression \n") +
+ theme(plot.title = element_text(hjust = 0.5, size = 15), 
+ axis.title.x = element_text(face="bold", colour="red", size = 12),
+ axis.title.y = element_text(face="bold", colour="red", size = 12))
+```
+
+We choose the value of λ that should minimize the expected prediction error that is the actual minimum for the same reason of ridge regression, as we would like to see improvement of LASSO model from the OLS model, and a slightly less complex model may run faster, but can not guarantee improvement in expected prediction error.
+
+Referring to the sideway barplot, the ones with bars appears to be important, while those with no bars are not important. We state that predictors including seanson 8, season 6, season 3, phyllis, pual_lieberstein, michael, jim, angela, paul_feig, and greg_daniels are important with exist value of coefficient, while the rest have a value of zero, showing no importance.
+
+## Part 5 (10 pts)
+
+Which of OLS with all predictors, OLS with your chosen subset of predictors, Ridge, or LASSO has the smallest cross validation estimate of expected prediction error?  Do you have any intuition as to why this result occurs?
+
+Using the optimal models from each step, compute an estimate of the expected prediction error using the heldout test data.  Does the same relationship hold?
+
+### Part 5 Solution
+
+First, we already have the LOOCV estimate from part 1 and 2:
+```{r}
+print(loocv_ols)
+print(loocv_ols_2)
+```
+
+We can also get the cross validation estimate for the Ridge and LASSO:
+```{r}
+print(ridge_cv)
+print(lasso_mod_cv)
+```
+
+From this table, we can get the associated EPE measure is about 0.22 for LASSO and ridge. 
+
+Among them, OLS with our chosen subset of predictors has the smallest cross validation estimate of expected prediction error. Possible explanation would be that our manual selection of important coefficients appear to be more effective and decrease variance largely.
+
+
+For the heldout test data:
+```{r}
+test_du <- model.matrix(~., data=test)[,-1]
+test_new <- as.data.frame(test_du)
+test_x <- as.matrix(test_new[,1:35])
+test_y <- as.matrix(test_new[,36])
+test2 <- test_new%>%select(c("seasonSeason 2","seasonSeason 3","seasonSeason 5","seasonSeason 7","jim","kelly","michael","greg_daniels","b_j_novak","paul_lieberstein","mindy_kaling","brent_forrester","justin_spitzer","imdb_rating"))
+```
+
+
+```{r}
+ols_test_preds <- predict(ols_mod, newdata = test_new)
+ols_test_preds_subset <- predict(ols_mod2, newdata = test2)
+ridge_test_preds <- predict(ridge_mod, type = "response", newx = as.matrix(test_x),
+    s = ridge_cv$lambda.min)
+lasso_test_preds <- predict(lasso_mod_cv, type = "response", newx = as.matrix(test_x),
+    s = lasso_mod_cv$lambda.min)
+
+test_mse <- c(mean((ols_test_preds - test_y)^2),
+                    mean((ols_test_preds_subset - test_y)^2),
+                    mean((ridge_test_preds - test_y)^2), 
+                    mean((lasso_test_preds - test_y)^2))
+names(test_mse) <- c("OLS","OLS_subset", "Ridge", "LASSO")
+print(test_mse)
+```
+
+Comparing the estimate of the expected prediction error using the heldout test data, the same relationship hold that OLS with our chosen subset of predictors has the smallest error, following by Ridge, LASSO, and then OLS with all predictors. 
+
+

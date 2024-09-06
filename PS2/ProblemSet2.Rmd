@@ -1,0 +1,431 @@
+---
+title: 'Problem Set #2'
+author: "Tiantian Meng, Caiwei Wang, Wendy Cheng"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: no
+    toc_depth: '2'
+    df_print: paged
+  pdf_document:
+    toc: no
+    toc_depth: '2'
+  prettydoc::html_pretty:
+    df_print: kable
+    theme: leonids
+    highlight: github
+    toc: no
+    toc_depth: 2
+    toc_float:
+      collapsed: no
+urlcolor: blue
+---
+
+```{r, include=FALSE}
+library(ggplot2)
+library(data.table)
+library(dplyr)
+library(cowplot)
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning = FALSE, fig.width = 16/2, fig.height = 9/2, tidy.opts=list(width.cutoff=60), tidy=TRUE)
+```
+
+This is the second problem set for QTM 347.  It contains a few proofs related to linear regression and a programming problem that is intended to demonstrate a concept related to prediction error.  You may complete this problem set in groups of up to 3.  Be sure to indicate any collaborators at the top of your solutions document.  All students must turn in a copy of the solutions.  
+
+Please use the intro to RMarkdown posted in the Intro module and my .Rmd file as a guide for writing up your answers.  You can use any language you want.
+
+Your final submission on Canvas should include, at a minimum, 2 files: 1) a .Rmd/.ipynb file and 2) either a rendered HTML file or a PDF.
+
+This assignment is due by January 27th, 2023 at 11:59 PM EST. 
+
+# Problem 1 (35 pts.)
+
+Linear regression is a fundamental tool for statistics and machine learning.  At its core, linear regression is a simple task: given a set of $P$ predictors, $\{\mathbf{x}_i\}_{i = 1}^N = \boldsymbol{X}$, with each $\mathbf{x}_i$ a $P + 1$-vector of predictors with a 1 as the first element (to account for an intercept) and outcomes, $\{y_i\}_{i = 1}^N = \boldsymbol{y}$, find the $P + 1$-vector $\hat{\boldsymbol{\beta}}$ that minimizes the residual sum of squares:
+
+$$\hat{\boldsymbol{\beta}} = \underset{\boldsymbol{\beta}^*}{\text{argmin}} \left[ \left(\boldsymbol{y} - \boldsymbol{X}\boldsymbol{\beta}^*  \right)' \left(\boldsymbol{y} - \boldsymbol{X}\boldsymbol{\beta}^*  \right) \right]$$
+
+This can also be expressed as a summation over errors:
+
+$$\hat{\boldsymbol{\beta}} = \underset{\boldsymbol{\beta}^*}{\text{argmin}} \left[ \sum \limits_{i = 1}^N \left(y_i - \boldsymbol{\beta}^{*'} \boldsymbol{x}_i \right)^2 \right]$$
+
+## Part 1 (10 pts.)
+
+Working with matrix derivatives, show that the $\hat{\boldsymbol{\beta}}$ that minimizes the sum of squared errors is:
+
+$$\underset{\boldsymbol{\beta}^*}{\text{argmin}} \left[ \left(\boldsymbol{y} - \boldsymbol{X}\boldsymbol{\beta}^*  \right)' \left(\boldsymbol{y} - \boldsymbol{X}\boldsymbol{\beta}^*  \right) \right] = \left(\boldsymbol{X}'\boldsymbol{X} \right)^{-1} \boldsymbol{X}'\boldsymbol{y}$$
+
+and that the Jacobian (the vector of first derivatives with respect to the elements of $\boldsymbol \beta^*$) is:
+
+$$2 \mathbf X' \mathbf X \boldsymbol \beta^* - 2 \mathbf X' \mathbf y$$
+
+### Part 1 Solution
+$$S(\boldsymbol \beta^*) = \left[ \left(\boldsymbol{y} - \boldsymbol{X}\boldsymbol{\beta}^*  \right)' \left(\boldsymbol{y} - \boldsymbol{X}\boldsymbol{\beta}^*  \right) \right] \\ =  \boldsymbol{y}'\boldsymbol{y}\ - \boldsymbol{y}'\boldsymbol{X}\boldsymbol{\beta}^*\ -\boldsymbol{\beta}^{*'}\boldsymbol{X}'\boldsymbol{y}\ + \boldsymbol{\beta}^{*'}\boldsymbol{X}'\boldsymbol{X}\boldsymbol{\beta} \\ =  \boldsymbol{y}'\boldsymbol{y}\ - 2 \boldsymbol{\beta}^{*'}\boldsymbol{X}'\boldsymbol{y}\ + \boldsymbol{\beta}^{*'}\boldsymbol{X}'\boldsymbol{X}\boldsymbol{\beta}\ , \;\;\;\;\;\;\; (we\ have: \boldsymbol{y}'\boldsymbol{X}\boldsymbol{\beta}\ =\ (\boldsymbol{y}'\boldsymbol{X}\boldsymbol{\beta})'\  =\ \boldsymbol{\beta}'\boldsymbol{X}'\boldsymbol{y}) \\$$
+To find the $\hat{\boldsymbol{\beta}}$ that minimizes the sum of squared errors, take derivative of function 'S' with respect to $\boldsymbol \beta^*$:
+
+$$ \frac{\partial a'b}{\partial b}\ =  \frac{\partial b'a}{\partial b} \ =\ a; \\ \frac{\partial b'Ab}{\partial b}\ =  2Ab\ =\ ab'A; \\ \frac{\partial 2\boldsymbol{\beta}^{*'}xy}{\partial \boldsymbol{\beta}}\ =\ \frac{\partial 2\boldsymbol{\beta}^{*'}(x'y)}{\partial \boldsymbol{\beta}} \ =\ 2X'y; \\ \frac{\partial \boldsymbol{\beta}^{*'}\boldsymbol{X}'\boldsymbol{X}\boldsymbol{\beta}}{\partial \boldsymbol{\beta}^{*}}\ =\ \frac{\partial \boldsymbol{\beta}^{*'}A\boldsymbol{\beta}^{*}}{\partial \boldsymbol{\beta}^{*}}\ = \ 2A\boldsymbol{\beta}^{*}\ = \ 2X'X\boldsymbol{\beta}^{*}$$
+So, we get the Jacobian:
+$$\frac{\partial S}{\partial \boldsymbol{\beta}^{*}}\ = \ -2\boldsymbol{X}'\boldsymbol{y}\ + \ 2\boldsymbol{X}'\boldsymbol{X}\boldsymbol{\beta}^{*}$$
+To check this is a minimum, take derivative again with $\boldsymbol \beta^*$, as long as X has full rank, this is a positive definite matrix and a min.
+
+From the Jacobian:
+$$ -2\boldsymbol{X}'\boldsymbol{y}\ + \ 2\boldsymbol{X}'\boldsymbol{X}\boldsymbol{\beta}^{*} \ =\ 0 \\ (\boldsymbol{X}'\boldsymbol{X})\boldsymbol{\beta}^{*} \ = \  \boldsymbol{X}'\boldsymbol{y}$$
+if the inverse of $(\boldsymbol{X}'\boldsymbol{X})$ exists, then pre-multiplying both sides by this inverse gives us:
+
+$$(\boldsymbol{X}'\boldsymbol{X})^{-1}(\boldsymbol{X}'\boldsymbol{X})\boldsymbol{\beta}^{*}\ = \ (\boldsymbol{X}'\boldsymbol{X})^{-1}\boldsymbol{X}'\boldsymbol{y} \\ By\ def:\ (\boldsymbol{X}'\boldsymbol{X})^{-1}(\boldsymbol{X}'\boldsymbol{X})\ =\ I \\ \ I\boldsymbol{\beta}^{*}\ =\ (\boldsymbol{X}'\boldsymbol{X})^{-1} \boldsymbol{X}'\boldsymbol{y} \\ so,\ we\ get\ \hat{\boldsymbol{\beta}}\ =\ \underset{\boldsymbol{\beta}^*}{\text{argmin}} \left[ \left(\boldsymbol{y} - \boldsymbol{X}\boldsymbol{\beta}^*  \right)' \left(\boldsymbol{y} - \boldsymbol{X}\boldsymbol{\beta}^*  \right) \right] = \left(\boldsymbol{X}'\boldsymbol{X} \right)^{-1} \boldsymbol{X}'\boldsymbol{y}$$
+
+
+## Part 2 (10 pts.)
+
+Part of what makes OLS such a popular algorithm is that it is conceptually simple **and** it has really nice computational properties.  One of these properties is that the solution you found above is a **unique minimum** to the sum of squared errors objective function.  Argue that the solution above is a unique minimum to the squared error objective function.  You can assume that there is nothing weird in the features or the outcome - our feature matrix is of full column rank, $N \ge 2$, and $N >> P$.
+
+Hints:
+
+  1) By definition, $\hat{\boldsymbol \beta}$ can take any value in $\mathbb R^P$.  Therefore, there are no exterior boundaries.
+  
+  2) One way to show that the solution is a unique minimum is to argue that the objective function is strictly convex in $\boldsymbol \beta^*$.  If you take this approach, I recommend arguing that the matrix of second derivatives is a specific kind of definite.
+  
+  3) A different method has you do a multivariate version of the second derivative test.  This is largely the same as the above approach, but you need only show that a specific point in $\mathbb R^P$ is of a specific sign.
+
+### Part 2 Solution
+For this question we prove the function is convex: 
+Convex function: 
+$$\mathbf Z' \mathbf H \mathbf Z \ge \mathbf 0$$
+Showing that the second order derivative is always positive semi-definite:
+
+$$\frac{\partial^2 S}{{\partial \beta^{*'}}{\partial \beta^*}} = \frac{\partial}{\partial \beta^{*'}} (\frac{\partial S}{\partial \beta^*}) = \frac{\partial}{\partial \beta^{*'}}(-2 \mathbf X' \mathbf y + 2 \mathbf X' \mathbf X \boldsymbol \beta^*) \\   = \frac{\partial}{\partial \beta^{*'}}(-2 \mathbf X' \mathbf y + 2 \beta^{*'}\mathbf X' \mathbf X \boldsymbol) \\ = 0 + 2 \mathbf X' \mathbf X \\ = 2 \mathbf X' \mathbf X $$
+Since $\mathbf Z' \mathbf Z= \mathbf I$, we have: 
+$$ 2\mathbf Z' \mathbf X' \mathbf X \mathbf Z \\= 2||\mathbf X \mathbf Z||^2$$
+This is always zero or positive, which indicates that it's always positive definite. Therefore, we show that the function is convex in $\boldsymbol \beta^*$.
+
+
+## Part 3 (15 pts.)
+
+Frequently, we seek to perform **inference** on the values of $\boldsymbol{\beta}$ - we want to determine if the noise associated with the OLS estimator is small enough to say that each $\beta_j$ is statistically different from zero.  First, we want to show that the OLS estimator is **unbiased** for the true value of $\boldsymbol{\beta}$ so that we can claim that our inference is meaningful.  Then, we need to derive the **standard error** of the estimator to perform inference.  As shown in class, both of these properties are heavily involved in computing the generalizability of a linear regression model.   
+
+Show that $\hat{\boldsymbol{\beta}} = \left(\boldsymbol{X}'\boldsymbol{X} \right)^{-1} \boldsymbol{X}'\boldsymbol{y}$ is unbiased for $\boldsymbol{\beta}$; e.g. $E_{y | x}[\boldsymbol{\hat{\beta}}] = \boldsymbol{\beta}$.  Then, derive the **variance-covariance matrix** for $\boldsymbol{\hat{\beta}}$; e.g. $\text{Cov}_{y | x}[\hat{\boldsymbol{\beta}}]$.  The square root of the diagonal of the variance-covariance matrix then provides the **standard errors**.
+
+Some helpful identities:
+
+  1. For multiple linear regression, we assume that $\boldsymbol{X}$ is constant while $E_{y | x}[\boldsymbol{y}] = X\boldsymbol{\beta}$ and $\text{Cov}_{y | x}[\boldsymbol{y}] = \sigma^2 \mathcal{I}_{N}$ where $\sigma^2$ is the constant error variance (e.g. a scalar) and $\mathcal{I}_N$ is the $N \times N$ identity matrix.
+  
+  2. Suppose we want to know $\text{Cov}[\boldsymbol{A}\boldsymbol{y}]$ where $\boldsymbol{A}$ is a matrix of constants and $\boldsymbol{y}$ is a random vector.  Then $\text{Cov}[\boldsymbol{A}\boldsymbol{y}] = \boldsymbol{A} \times \text{Cov}[\boldsymbol{y}] \times \boldsymbol{A}'$   
+  
+### Part 3 Solution
+$$\hat{\boldsymbol{\beta}} = (\mathbf X' \mathbf X)^{-1} \mathbf X'\mathbf y, \mathbf y=\mathbf X \boldsymbol{\beta}+ \boldsymbol{\epsilon}$$
+$$ \hat{\boldsymbol{\beta}} = (\mathbf X' \mathbf X)^{-1} \mathbf X'(\mathbf X \boldsymbol{\beta}+ \boldsymbol{\epsilon}) \\= \boldsymbol{\beta} + (\mathbf X' \mathbf X)^{-1} \mathbf X'\boldsymbol{\epsilon}, \;since (\mathbf X' \mathbf X)^{-1} \mathbf X'\mathbf X = \mathbf I \;\; \;\;\;\;\;\;\;\;\;(*)$$
+$$E_{y | x}[\boldsymbol{\hat{\beta}}] = E_{y | x}[\boldsymbol{\beta}] + E[(\mathbf X' \mathbf X)^{-1} \mathbf X'\boldsymbol{\epsilon}] \\ = \boldsymbol{\beta} + (\mathbf X' \mathbf X)^{-1} \mathbf X'E[\boldsymbol{\epsilon}], \; E[\boldsymbol{\epsilon}]=0 \; by \; assupmtion \\= \boldsymbol{\beta}+0 \\ E_{y | x}[\boldsymbol{\hat{\beta}}] = \boldsymbol{\beta}$$
+So $\hat{\boldsymbol{\beta}} = \left(\boldsymbol{X}'\boldsymbol{X} \right)^{-1} \boldsymbol{X}'\boldsymbol{y}$ is unbiased for $\boldsymbol{\beta}$; e.g. $E_{y | x}[\boldsymbol{\hat{\beta}}] = \boldsymbol{\beta}$.
+
+Derive the Variance-Covariance Matrix:
+
+$$\text{Cov}_{y | x}[\hat{\boldsymbol{\beta}}]\ =\ E[(\hat{\boldsymbol{\beta}}\ -\ {\boldsymbol{\beta}})(\hat{\boldsymbol{\beta}}\ -\ {\boldsymbol{\beta}})'] \\ =\ E[((\boldsymbol{X}'\boldsymbol{X})^{-1}\boldsymbol{X}'\boldsymbol{\epsilon})((\boldsymbol{X}'\boldsymbol{X})^{-1}\boldsymbol{X}'\boldsymbol{\epsilon})'] \ , \  which\ is \ from\ equation\ (*). \\ =\ E[(\boldsymbol{X}'\boldsymbol{X})^{-1}\boldsymbol{X}'\boldsymbol{\epsilon}\boldsymbol{\epsilon}'\boldsymbol{X}(\boldsymbol{X}'\boldsymbol{X})^{-1}]$$
+Since we have $(AB)' = B'A'$, so $(X'X)^{-1}X'\boldsymbol{\epsilon} = \boldsymbol{\epsilon}'X(X'X)^{-1}$. Then:
+
+$$ = \ (\boldsymbol{X}'\boldsymbol{X})^{-1}\boldsymbol{X}'E[\boldsymbol{\epsilon}\boldsymbol{\epsilon}']\boldsymbol{X}(\boldsymbol{X}'\boldsymbol{X})^{-1}$$
+Since $E[\boldsymbol{\epsilon}\boldsymbol{\epsilon}'] = \text{Cov}_{y | x}[{\boldsymbol{y}}] = \boldsymbol{\sigma}^2I$, then:
+
+$$ =\ (\boldsymbol{X}'\boldsymbol{X})^{-1}\boldsymbol{X}'(\boldsymbol{\sigma}^2I)\boldsymbol{X}(\boldsymbol{X}'\boldsymbol{X})^{-1} \\ =\ \boldsymbol{\sigma}^2I(\boldsymbol{X}'\boldsymbol{X})^{-1}\boldsymbol{X}'\boldsymbol{X}(\boldsymbol{X}'\boldsymbol{X})^{-1} \\ =\  \boldsymbol{\sigma}^2(\boldsymbol{X}'\boldsymbol{X})^{-1}$$
+
+
+# Problem 2 (65 pts.)
+
+In class, we demonstrated that mean squared prediction error for the linear regression model can be expressed as a function of the **in-sample** mean squared error of the regression fit.  Specifically, when the true outcome generating function is of the form $\mathbf x' \boldsymbol \beta$ and we know that we have all of the predictors, we can compute the limiting expected prediction error as:
+
+$$MSPE = \frac{1}{N}\sum \limits_{i = 1}^N (y_i - \hat{y}_i)^2 + V[\mathbf x' \boldsymbol \beta]$$
+
+Furthermore, when we assume that $\mathbf X_D$ is fixed, we can further simplify this to:
+
+$$MSPE = \frac{1}{N}\sum \limits_{i = 1}^N (y_i - \hat{y}_i)^2 + V_{y | x}[\mathbf x' \boldsymbol \beta] = \frac{1}{N}\sum \limits_{i = 1}^N (y_i - \hat{y}_i)^2 + \sigma^2 \text{tr}(\mathbf x_0' (\mathbf X_D' \mathbf X_D)^{-1} \mathbf x_0)$$
+
+Under these restrictive assumptions, the variance term of the linear regression model actually has a simple asymptotic form that gives some information about how the size of the training data and the number of parameters estimated relates to model variance and, in turn, increases the gap between in-sample fit and the expected out of sample fit.
+
+Since this behavior is only defined in expectation, it can be difficult to demonstrate it computationally.  However, we can leverage **simulations** to broadly show these properties hold when we create data in such a way that we know all of the properties of the true outcome generating function.  This problem will see you build this simulation and make some broad conclusions about how the **optimism gap** changes as a function of $N$ and $P$.
+
+## Part 1 (25 pts.)
+
+Build a function called `pred_gap` that takes three arguments: 1) `n` - the number of training observations to generate, 2) `p` - the number of training features to generate per observation, and 3) `sig2` - the variance of the noise component.  Using these inputs, do the following:
+
+  1. Generate $N \times P$ random draws from a uniform distribution between -3 and 3.  Arrange these draws into a $N \times P$ matrix of training features, $\mathbf X$.
+  
+  2. Generate $P$ more random draws from a uniform distribution between -3 and 3.  These will be your true outcome generating regression coefficients, $\boldsymbol \beta$.  Generate a random draw between -3 and 3 to be your intercept, $\alpha$, as well.
+  
+  3. Compute a "denoised" outcome $N$-vector: $\mathbf X \boldsymbol \beta + \mathbf \alpha$
+  
+  4. Now, we're going to add the noise.  Take $N$ random draws from a normal distribution with mean 0 and variance equal to `sig2`.  Add these $N$ random draws to the denoised outcome vector and save them as `y_train`.
+  
+  5. Using the same denoised outcome vector (e.g. $\mathbf X$ is fixed), take $N$ more random draws from a normal distribution with mean 0 and variance equal to `sig2`.  Add these $N$ random draws to the denoised outcome vector and save them as `y_test`.
+  
+  6. Using `y_train` as your outcome and $\mathbf X$ as your set of features, estimate the set of coefficients that minimize the in-sample mean squared error for a linear regression model (e.g. compute a regression fit using OLS).
+  
+  7. Using this set of coefficients, generate $\hat{y}_i$ (e.g. predictions) for each observation in the training feature set.
+  
+  8. Using these predictions, compute the in-sample MSE using `y_train`.  Similarly, compute the "out-of-sample" MSE of the fit using `y_test`.
+  
+  9.  Finally, return the size of the scaled optimism gap: $\frac{(\text{Out MSE} - \text{In MSE})}{\sigma^2}$.  Note that this final returned value should be a single number.
+  
+Hints:
+
+  1. There's a really nifty trick in R that will help you greatly here.  Suppose you have a data frame, `df`, with a column `y` that is your outcome variable and the rest of the columns are features that should be included on the right-hand side of the regression equation.  You can easily denote this in the R formula language as `lm(y ~ ., data = df)`.
+  
+### Part 1 Solution
+```{r}
+pred_gap <- function (n, p, sig2){   
+  
+  # 1. N*P matrix of training feature X   
+  X <- matrix(runif(n*p, min = -3,max=3),nrow = n)      
+  
+  # 2. Generate beta and alpha   
+  beta <- matrix(runif(p,min = -3,max = 3),nrow = p)   
+  alpha <- matrix(runif(n,min = -3,max = 3),nrow = n) # not sure: dimension of beta and alpha      
+  
+  # 3. Denoise outcome   
+  denoise <- X %*% beta + alpha      
+  
+  # 4. Generate noise, add to denoise outcome   
+  noise <- matrix(rnorm(n,mean = 0, sd=sqrt(sig2)),nrow = n)   
+  y_train <- denoise+noise      
+  
+  # 5. Another noise and make y_test   
+  noise2<- matrix(rnorm(n,mean = 0, sd=sqrt(sig2)),nrow = n)   
+  y_test <- denoise+noise2      
+  
+  # 6. Put them into a dataframe and run linear regression model   
+  df<-data.frame(cbind(X,y_train))   
+  names(df)[length(names(df))]<-"y"   
+  mod <- lm(y~., data=df)      
+  
+  # Use coefficients to generate predictions   
+  predictors <- predict(mod,df)      
+  
+  # In and out sample MSE   
+  in_mse <- sqrt(mean((y_train-predictors)^2))   
+  out_mse <- sqrt(mean((y_test-predictors)^2))      
+  
+  # Optimism Gap   
+  gap <- (out_mse - in_mse)/sig2      
+  
+  return (gap) 
+}
+
+
+```
+
+  
+## Part 2 (10 pts.)
+
+Create a function that wraps around your previous function called `pred_gap_rep` that repeats the above procedure a fixed number of times.  This function should have 4 inputs: 1) `n`, 2) `p`, 3) `sig2`, 4) `reps` - the number of times to repeat the procedure outlined in `pred_gap`.  This function should:
+
+  1. Create a holder for `reps` values of returned estimates of the optimism gap with fixed $N$ and $P$.
+  
+  2. Run `pred_gap` `reps` times and store the size of the scaled optimism gap.
+  
+  3. Return the average value of the scaled optimism gap at the fixed values of $N$ and $P$.
+  
+Because the properties that we're trying to show only hold in expectation, repeating the procedure a number of times and taking the average reduces the noise that accompanies the value of interest.
+
+Hints:
+
+  1. Replicating the function can be done using a for loop in any language.  In R, you can also use the function `replicate()` to repeat a particular expression `n` times.
+  
+### Part 2 Solution
+```{r}
+#function 
+pred_gap_rep <- function(n,p,sig2,reps){   
+  rep_gaps = replicate(reps,pred_gap(n, p, sig2))   
+  avg_gaps = mean(rep_gaps)   
+  s_gaps <- data.frame(matrix(ncol = 0, nrow = 0))   
+  s_gaps <<- cbind(rep_gaps)   
+  return(avg_gaps)}
+
+```
+
+```{r} 
+#test 
+pred_gap_rep(4,5,0.2,20) 
+s_gaps 
+```
+
+## Part 3 (20 pts.)
+
+Using `pred_gap_rep`, we're going to show what happens to the prediction gap as $N$ and $P$ change.
+
+Let's start by examining what happens as $N$ increases.  Setting $P$ to 10, run `pred_gap_rep` for 25 replicates setting $N$ equal to 100, 200, 300, 400, 500, 750, 1000, 1500, 2000, 2500, 3000, 4000, and 5000.  Plot the returned average gaps as a function of $N$.
+
+Create two similar plots setting $P$ equal to 5 and 50 and combine the three plots into a single grid plot.
+
+What appears to be the functional relationship between $N$ and the size of the prediction gap for fixed $P$?  Is the relationship linear?  Inverse?  Quadratic?  Log? 
+
+Now, do a similar procedure fixing $N$ and varying $P$.  Setting $N$ to 500, run `pred_gap_rep` for 25 replicates setting $P$ equal to values between 2 and 50 by 2.  Plot the returned average gaps as a function of $P$.
+
+Create two similar plots setting $N$ equal to 100 and 2500 and combine the three plots into a single grid plot.
+
+What appears to be the functional relationship between $P$ and the size of the prediction gap for fixed $N$?  Is the relationship linear?  Inverse?  Quadratic?  Log? 
+
+Hints:
+
+  1. Even though we're averaging over a number of simulation runs, we are still approximating limiting behavior.  This can lead to some unintuitive results in cases where we're not really approximating "infinity".  In particular, it is totally possible that you'll see that the gap is negative when $N$ is large and $P$ is small.  Do not be alarmed!  Just know that this can happen and it's not an indication of being incorrect on your part.
+  
+  2. Depending on how efficiently your base function runs, the replicates may take some time.  When possible, avoid for loops and replace them with **matrix multiplication**.
+  
+  3. Your choice for `sig2` doesn't really matter all that much.  The relationships you'll find hold generically regardless of the error variance.  However, the relationship is seen most cleanly when $\sigma^2$ is neither too big nor too small.  You can vary $\sigma^2$ in different replicates or not.  I recommend setting $\sigma^2$ to be a randomly drawn value between 1 and 3.
+  
+  4. Be wary of really overinterpreting wiggles in functions when the values are really small!  
+  
+### Part 3 Solution
+```{r}
+n1 = pred_gap_rep(100,10,runif(1, min = 1,max=3),25)
+n2 = pred_gap_rep(200,10,runif(1, min = 1,max=3),25)
+n3 = pred_gap_rep(300,10,runif(1, min = 1,max=3),25)
+n4 = pred_gap_rep(400,10,runif(1, min = 1,max=3),25)
+n5 = pred_gap_rep(500,10,runif(1, min = 1,max=3),25)
+n6 = pred_gap_rep(750,10,runif(1, min = 1,max=3),25)
+n7 = pred_gap_rep(1000,10,runif(1, min = 1,max=3),25)
+n8 = pred_gap_rep(1500,10,runif(1, min = 1,max=3),25)
+n9 = pred_gap_rep(2000,10,runif(1, min = 1,max=3),25)
+n10 = pred_gap_rep(2500,10,runif(1, min = 1,max=3),25)
+n11 = pred_gap_rep(3000,10,runif(1, min = 1,max=3),25)
+n12 = pred_gap_rep(4000,10,runif(1, min = 1,max=3),25)
+n13 = pred_gap_rep(5000,10,runif(1, min = 1,max=3),25)
+
+```
+
+```{r}
+n_avg_gap <- c(n1,n2,n3,n4,n5,n6,n7,n8,n9,n10,n11,n12,n13) 
+n_value <- c(100, 200, 300, 400, 500, 750, 1000, 1500, 2000, 2500, 3000, 4000, 5000) 
+df_n <- data.frame(n_value,n_avg_gap) 
+p1 <- ggplot()+   
+  geom_point(data = df_n, aes(x=n_value, y=n_avg_gap))+   
+  xlab("N")+   
+  ylab("average_gap")
+
+```
+
+```{r}
+m1 = pred_gap_rep(100,5,runif(1, min = 1,max=3),25) 
+m2 = pred_gap_rep(200,5,runif(1, min = 1,max=3),25) 
+m3 = pred_gap_rep(300,5,runif(1, min = 1,max=3),25) 
+m4 = pred_gap_rep(400,5,runif(1, min = 1,max=3),25) 
+m5 = pred_gap_rep(500,5,runif(1, min = 1,max=3),25) 
+m6 = pred_gap_rep(750,5,runif(1, min = 1,max=3),25) 
+m7 = pred_gap_rep(1000,5,runif(1, min = 1,max=3),25) 
+m8 = pred_gap_rep(1500,5,runif(1, min = 1,max=3),25) 
+m9 = pred_gap_rep(2000,5,runif(1, min = 1,max=3),25) 
+m10 = pred_gap_rep(2500,5,runif(1, min = 1,max=3),25) 
+m11 = pred_gap_rep(3000,5,runif(1, min = 1,max=3),25) 
+m12 = pred_gap_rep(4000,5,runif(1, min = 1,max=3),25) 
+m13 = pred_gap_rep(5000,5,runif(1, min = 1,max=3),25)
+
+```
+
+```{r}
+n2_avg_gap <- c(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13) 
+df_n2 <- data.frame(n_value,n2_avg_gap) 
+p2 <- ggplot()+   
+  geom_point(data = df_n2, aes(x=n_value, y=n2_avg_gap))+   
+  xlab("N")+   
+  ylab("average_gap")
+
+```
+
+```{r}
+s1 = pred_gap_rep(100,50,runif(1, min = 1,max=3),25)
+s2 = pred_gap_rep(200,50,runif(1, min = 1,max=3),25)
+s3 = pred_gap_rep(300,50,runif(1, min = 1,max=3),25)
+s4 = pred_gap_rep(400,50,runif(1, min = 1,max=3),25)
+s5 = pred_gap_rep(500,50,runif(1, min = 1,max=3),25)
+s6 = pred_gap_rep(750,50,runif(1, min = 1,max=3),25)
+s7 = pred_gap_rep(1000,50,runif(1, min = 1,max=3),25)
+s8 = pred_gap_rep(1500,50,runif(1, min = 1,max=3),25)
+s9 = pred_gap_rep(2000,50,runif(1, min = 1,max=3),25)
+s10 = pred_gap_rep(2500,50,runif(1, min = 1,max=3),25)
+s11 = pred_gap_rep(3000,50,runif(1, min = 1,max=3),25)
+s12 = pred_gap_rep(4000,50,runif(1, min = 1,max=3),25)
+s13 = pred_gap_rep(5000,50,runif(1, min = 1,max=3),25)
+```
+
+```{r}
+n3_avg_gap <- c(s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13) 
+df_n3 <- data.frame(n_value,n2_avg_gap) 
+p3 <- ggplot()+   
+  geom_point(data = df_n3, aes(x=n_value, y=n3_avg_gap))+   
+  xlab("N")+   
+  ylab("average_gap")
+
+```
+
+```{r}
+plot_grid(p1,p2,p3, labels = c('P = 10','P = 5','P = 50'), label_size = 12)
+
+```
+
+
+It looks like an inverse relationship.
+
+
+```{r}
+p_list = seq(2, 50, by = 2) 
+g <- data.frame()
+for(p in p_list){    
+  d = pred_gap_rep(500,p,runif(1, min = 1,max=3),25)    
+  g = rbind(g,d)}
+df_p1 <- cbind(p_list,g) 
+colnames(df_p1) <- c("p","gap")
+pp1 <- ggplot()+   
+  geom_point(data = df_p1, aes(x=p, y=gap))+   
+  xlab("P")+   
+  ylab("average_gap")
+
+
+```
+
+```{r}
+g2 <- data.frame()
+for(p in p_list){    
+  d = pred_gap_rep(100,p,runif(1, min = 1,max=3),25)    
+  g2 = rbind(g2,d)}
+df_p2 <- cbind(p_list,g2) 
+colnames(df_p2) <- c("p","gap")
+pp2 <- ggplot()+   
+  geom_point(data = df_p2, aes(x=p, y=gap))+   
+  xlab("P")+   
+  ylab("average_gap")
+
+```
+
+```{r}
+g3 <- data.frame()
+for(p in p_list){    
+  d = pred_gap_rep(2500,p,runif(1, min = 1,max=3),25)    
+  g3 = rbind(g3,d)}
+df_p3 <- cbind(p_list,g3) 
+colnames(df_p3) <- c("p","gap")
+pp3 <- ggplot()+   
+  geom_point(data = df_p3, aes(x=p, y=gap))+   
+  xlab("P")+   
+  ylab("average_gap")
+
+```
+
+```{r}
+plot_grid(pp1,pp2,pp3, labels = c('N = 500','N = 100','N = 2500'), label_size = 12)
+
+```
+
+There seems a linear relationship between P and avg_gap.
+
+
+## Part 4 (10 pts.)
+  
+Provide some intuition for the results you uncovered above.  Why does increasing $P$ cause the gap to change in the way it does?  Why does increasing $N$ cause the gap to change in the way it does?  Think carefully about **why** increasing $P$ changes the model variance.
+
+Similarly, explain why we may not expect these relationships to hold in a more realistic setting where our simplifying assumptions of fixed $\mathbf X$ and true linearity are not met.
+
+### Part 4 Solution
+
+The increasing $P$ cause the gap to increase, that may due to the increase of complexity of the model by more features, the gap would be added as more variance. The increasing $P$ adds the model variance as the number of polynomial terms increases, there's more model-specific wiggliness.
+ 
+The increasing $N$ cause the gap decrease as variance decreases as $N$ gets large and more data included gives better predictive power.
+ 
+We assume fixed $\mathbf X$ and true linearity in the assumption of getting the formulas we adopted to solve the questions and find the relationships. However, In real world, fixed $\mathbf X$ and true linearity are not met, so these assumptions no longer feasible, lead us not expect these relationships to hold.
+
+
+  
